@@ -22,7 +22,7 @@ responsible for any damage to chat rooms caused by using this userbot.</p>
 <h2>Linux and Windows [only wsl]</h2>
 
 ```bash
-apt-get update && apt install curl && curl -sS https://raw.githubusercontent.com/KurimuzonAkuma/Kurimuzon-Userbot/master/install.sh | sh
+curl -sS https://raw.githubusercontent.com/KurimuzonAkuma/Kurimuzon-Userbot/master/install.sh | sudo sh
 ```
 
 <h2>Manual</h2>
