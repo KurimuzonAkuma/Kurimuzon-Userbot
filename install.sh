@@ -1,35 +1,34 @@
-#!/bin/bash
-if command -v termux-setup-storage; then
-  echo Termux is stupid shit of stupid shit.
+#!/usr/bin/env sh
+
+if [ $(id -u) -ne 0 ]; then
+  echo Please run this script as root
   exit 1
 fi
 
-if [[ $UID != 0 ]]; then
-  echo Please run this script as root
+if [ -x "$(command -v termux-setup-storage)" ]; then
+  echo Termux is stupid shit of stupid shit.
   exit 1
 fi
 
 apt update -y
 apt install python3 python3-pip git -y || exit 2
+python3 -m pip install -U pip wheel
 
-su -c "python3 -m pip install -U pip" $SUDO_USER
-su -c "python3 -m pip install -U wheel" $SUDO_USER
-
-if [[ -d "Kurimuzon-Userbot" ]]; then
+if [ -d "Kurimuzon-Userbot" ]; then
   cd Kurimuzon-Userbot
-elif [[ -f ".env.example" ]] && [[ -f "main.py" ]] && [[ -d "modules" ]]; then
+elif [ -f ".env.example" ] && [ -f "main.py" ] && [ -d "plugins" ]; then
   :
 else
   git clone https://github.com/KurimuzonAkuma/Kurimuzon-Userbot || exit 2
   cd Kurimuzon-Userbot || exit 2
 fi
 
-if [[ -f ".env" ]] && [[ -f "KurimuzonUserbot.session" ]]; then
-  printf "\x1b[31mIt seems that Kurimuzon-Userbot is already installed. Exiting...\x1b[0m\n"
+if [ -f ".env" ] && [ -f "KurimuzonUserbot.session" ]; then
+  printf "It seems that Kurimuzon-Userbot is already installed. Exiting...\n"
   exit
 fi
 
-su -c "python3 -m pip install -U -r requirements.txt" $SUDO_USER || exit 2
+python3 -m pip install -U -r requirements.txt || exit 2
 
 echo
 echo "Enter API_ID and API_HASH"
@@ -37,7 +36,7 @@ echo "You can get it here -> https://my.telegram.org/apps"
 echo "Leave empty to use defaults"
 read -r -p "API_ID > " api_id
 
-if [[ $api_id = "" ]]; then
+if [ "$api_id" = "" ]; then
   api_id="6"
   api_hash="eb06d4abfb49dc3eeb1aeb98ae0f581e"
 else
@@ -59,6 +58,8 @@ case $db_settings in
     ;;
   *)
     db_name=database.db
+    ;;
+esac
 
 cat > .env << EOL
 API_ID=${api_id}
@@ -113,5 +114,3 @@ EOL
     echo "============================"
     ;;
 esac
-
-chown -R $SUDO_USER:$SUDO_USER .
