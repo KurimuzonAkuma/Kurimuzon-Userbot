@@ -93,6 +93,13 @@ Group=${SUDO_USER}
 [Install]
 WantedBy=multi-user.target
 EOL
+    if grep -qi microsoft /proc/version; then
+        if grep -q systemd=true /etc/wsl.conf; then
+            :
+        else
+            echo "[boot]\nsystemd=true" >> /etc/wsl.conf
+        fi
+    fi
     systemctl daemon-reload
     systemctl start Kurimuzon-Userbot
     systemctl enable Kurimuzon-Userbot
