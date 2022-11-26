@@ -8,19 +8,12 @@ from utils.scripts import format_module_help
 @Client.on_message(filters.command(["help", "h"], prefix) & filters.me)
 async def help_cmd(_, message: Message):
     if len(message.command) == 1:
+        msg_edited = False
         text = f"For more help on how to use a command, type <code>{prefix}help [module]</code>\n\nAvailable Modules:\n"
 
-        msg_edited = False
         for module_name, module_commands in sorted(modules_help.items(), key=lambda x: x[0]):
-            text += "• {}: {}\n".format(
-                module_name.title(),
-                " ".join(
-                    [
-                        f"<code>{prefix + cmd_name.split()[0]}</code>"
-                        for cmd_name in module_commands.keys()
-                    ]
-                ),
-            )
+            text += f'• {module_name.title()}: {" ".join([f"<code>{prefix + cmd_name.split()[0]}</code>" for cmd_name in module_commands.keys()])}\n'
+
             if len(text) >= 2048:
                 text += "</b>"
                 if msg_edited:
