@@ -1,18 +1,27 @@
 #!/usr/bin/env sh
 
-if [ $(id -u) -ne 0 ]; then
-  echo Please run this script as root
-  exit 1
-fi
-
 if [ -x "$(command -v termux-setup-storage)" ]; then
-  echo Termux is stupid shit of stupid shit.
-  exit 1
+    termux-wake-lock
+
+    pkg update -y && pkg upgrade -y
+    pkg install python3 git clang ffmpeg wget libjpeg-turbo libcrypt ndk-sysroot zlib openssl -y || exit 2
+
+    python3 -m pip install -U pip
+    LDFLAGS="-L${PREFIX}/lib/"
+    CFLAGS="-I${PREFIX}/include/"
+    pip3 install -U wheel
+else
+    if [ $(id -u) -ne 0 ]; then
+    echo Please run this script as root
+    exit 1
+    fi
+
+    apt update -y
+    apt install python3 python3-pip git -y || exit 2
+    python3 -m pip install -U pip wheel
 fi
 
-apt update -y
-apt install python3 python3-pip git -y || exit 2
-python3 -m pip install -U pip wheel
+
 
 if [ -d "Kurimuzon-Userbot" ]; then
   cd Kurimuzon-Userbot
@@ -69,55 +78,65 @@ API_HASH=${api_hash}
 DATABASE_NAME=${db_name}
 EOL
 
-chown -R $SUDO_USER:$SUDO_USER .
 
-echo
-echo "Choose installation type:"
-echo "[1] Systemd service"
-echo "[2] Custom (default)"
-read -r -p "> " install_type
 
-case $install_type in
-  1)
-    cat > /etc/systemd/system/Kurimuzon-Userbot.service << EOL
-[Unit]
-Description=Service for Kurimuzon-Userbot
-[Service]
-Type=simple
-ExecStart=$(which python3) ${PWD}/main.py
-WorkingDirectory=${PWD}
-Restart=always
-RestartSec=5
-User=${SUDO_USER}
-Group=${SUDO_USER}
-[Install]
-WantedBy=multi-user.target
-EOL
-    if grep -qi microsoft /proc/version; then
-        if grep -q systemd=true /etc/wsl.conf; then
-            :
-        else
-            echo "[boot]\nsystemd=true" >> /etc/wsl.conf
-        fi
-    fi
-    systemctl daemon-reload
-    systemctl start Kurimuzon-Userbot
-    systemctl enable Kurimuzon-Userbot
-
+if [ -x "$(command -v termux-setup-storage)" ]; then
     echo
     echo "============================"
-    echo "Great! Kurimuzon-Userbot installed successfully and running now!"
-    echo "Installation type: Systemd service"
-    echo "Start with: \"sudo systemctl start Kurimuzon-Userbot\""
-    echo "Stop with: \"sudo systemctl stop Kurimuzon-Userbot\""
-    echo "============================"
-    ;;
-  *)
-    echo
-    echo "============================"
-    echo "Great! Kurimuzon-Userbot installed successfully!"
-    echo "Installation type: Custom"
+    echo "Great! Dragon-Userbot installed successfully!"
     echo "Start with: \"python3 main.py\""
     echo "============================"
-    ;;
-esac
+else
+    chown -R $SUDO_USER:$SUDO_USER .
+
+    echo
+    echo "Choose installation type:"
+    echo "[1] Systemd service"
+    echo "[2] Custom (default)"
+    read -r -p "> " install_type
+
+    case $install_type in
+    1)
+        cat > /etc/systemd/system/Kurimuzon-Userbot.service << EOL
+    [Unit]
+    Description=Service for Kurimuzon-Userbot
+    [Service]
+    Type=simple
+    ExecStart=$(which python3) ${PWD}/main.py
+    WorkingDirectory=${PWD}
+    Restart=always
+    RestartSec=5
+    User=${SUDO_USER}
+    Group=${SUDO_USER}
+    [Install]
+    WantedBy=multi-user.target
+EOL
+        if grep -qi microsoft /proc/version; then
+            if grep -q systemd=true /etc/wsl.conf; then
+                :
+            else
+                echo "[boot]\nsystemd=true" >> /etc/wsl.conf
+            fi
+        fi
+        systemctl daemon-reload
+        systemctl start Kurimuzon-Userbot
+        systemctl enable Kurimuzon-Userbot
+
+        echo
+        echo "============================"
+        echo "Great! Kurimuzon-Userbot installed successfully and running now!"
+        echo "Installation type: Systemd service"
+        echo "Start with: \"sudo systemctl start Kurimuzon-Userbot\""
+        echo "Stop with: \"sudo systemctl stop Kurimuzon-Userbot\""
+        echo "============================"
+        ;;
+    *)
+        echo
+        echo "============================"
+        echo "Great! Kurimuzon-Userbot installed successfully!"
+        echo "Installation type: Custom"
+        echo "Start with: \"python3 main.py\""
+        echo "============================"
+        ;;
+    esac
+fi

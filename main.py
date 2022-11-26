@@ -5,14 +5,15 @@ import os
 import platform
 from time import perf_counter
 
-import uvloop
 from pyrogram import Client, idle
 from pyrogram.enums import ParseMode
 
+import shutil
+import subprocess
 from utils import config
 from utils.db import db
 from utils.misc import repo, script_path
-from utils.scripts import CustomFormatter
+from utils.scripts import CustomFormatter, restart
 
 if script_path != os.getcwd():
     os.chdir(script_path)
@@ -88,6 +89,13 @@ async def main():
 
 if __name__ == "__main__":
     with contextlib.suppress(KeyboardInterrupt, SystemExit):
-        uvloop.install()
+        if not shutil.which("termux-setup-storage"):
+            try:
+                import uvloop
+                uvloop.install()
+            except ImportError:
+                subprocess.run("pip install uvloop", shell=True)
+                restart()
+
         loop = asyncio.new_event_loop()
         loop.run_until_complete(main())

@@ -3,4 +3,3 @@ GitPython
 aiohttp
 pyrogram
 tgcrypto
-uvloop
