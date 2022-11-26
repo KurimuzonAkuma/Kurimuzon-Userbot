@@ -3,13 +3,13 @@ import contextlib
 import logging
 import os
 import platform
+import shutil
+import subprocess
 from time import perf_counter
 
 from pyrogram import Client, idle
 from pyrogram.enums import ParseMode
 
-import shutil
-import subprocess
 from utils import config
 from utils.db import db
 from utils.misc import repo, script_path
@@ -92,6 +92,7 @@ if __name__ == "__main__":
         if not shutil.which("termux-setup-storage"):
             try:
                 import uvloop
+
                 uvloop.install()
             except ImportError:
                 subprocess.run("pip install uvloop", shell=True)
