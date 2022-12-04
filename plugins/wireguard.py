@@ -1,4 +1,5 @@
 import datetime
+import logging
 import os
 import shutil
 import subprocess
@@ -27,6 +28,7 @@ text_template = (
             "2. Импортировать файл конфигурации\n"
             "3. Включить VPN\n\n"
 )
+
 def remove_readonly(func, path, _):
     "Clear the readonly bit and reattempt the removal"
     os.chmod(path, 0o0200)
@@ -63,7 +65,7 @@ class ConfigParser:
                                 self.sections[-1][section][key] = []
                             self.sections[-1][section][key].append(val.strip())
                 except Exception as e:
-                    print(f"{str(e)}line:{line}")
+                    logging.warning(f"WG | {str(e)} - line:{line}")
 
         return self.sections
 
@@ -289,15 +291,6 @@ class WireGuard:
                 "PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE\n"
                 "PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth+ -j MASQUERADE\n"
             )
-
-        with open("/etc/sysctl.conf", "r") as f:
-            lines = f.readlines()
-        with open("/etc/sysctl.conf", "w") as f:
-            for line in lines:
-                if line.startswith("#net.ipv4.ip_forward=1"):
-                    f.write("net.ipv4.ip_forward=1")
-                else:
-                    f.write(line)
 
         subprocess.run(
             "systemctl enable wg-quick@wg0.service",
