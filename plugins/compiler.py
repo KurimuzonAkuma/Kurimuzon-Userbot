@@ -12,7 +12,12 @@ from utils.misc import modules_help, prefix
 from utils.scripts import with_args
 
 
-def compile(code: str, compiler: str, lang: str):
+async def compile(message: Message, compiler: str, lang: str):
+    await message.edit_text(
+        f"<i><emoji id=5821116867309210830>🔃</emoji> Compiling {lang} code...</i>"
+    )
+
+    _, code = message.text.split(maxsplit=1)
     tempdir = TemporaryDirectory()
     path = pathlib.Path(tempdir.name)
     with NamedTemporaryFile("w+", suffix=".c", dir=path) as file:
@@ -55,16 +60,6 @@ def compile(code: str, compiler: str, lang: str):
             )
 
             result += f"<b>Completed in {round(stop_time - start_time, 5)}s.</b>"
-        return result
-
-
-async def compiler_task(message: Message, compiler: str, lang: str):
-    await message.edit_text(
-        f"<i><emoji id=5821116867309210830>🔃</emoji> Compiling {lang} code...</i>"
-    )
-
-    _, code = message.text.split(maxsplit=1)
-    result = compile(code, compiler, lang)
 
     await message.edit_text(result)
 
@@ -73,12 +68,58 @@ async def compiler_task(message: Message, compiler: str, lang: str):
 @with_args("<b>Code is not provided</b>")
 async def gnu_compiler(_, message: Message):
     if message.command[0] == "gcc":
-        asyncio.get_running_loop().create_task(compiler_task(message, "gcc", "C"))
+        await compile(message, "gcc", "C")
     elif message.command[0] == "gpp":
-        asyncio.get_running_loop().create_task(compiler_task(message, "g++", "C++"))
+        await compile(message, "g++", "C++")
+
+
+@Client.on_message(filters.command(["go"], prefix) & filters.me)
+@with_args("<b>Code is not provided</b>")
+async def go_compiler(_, message: Message):
+    await message.edit_text("<i><emoji id=5821116867309210830>🔃</emoji> Compiling Go code...</i>")
+    _, code = message.text.split(maxsplit=1)
+
+    tempdir = TemporaryDirectory()
+    path = pathlib.Path(tempdir.name)
+    with NamedTemporaryFile("w+", suffix=".go", dir=path) as file:
+        file.write(code)
+        file.seek(0)
+
+        start_time = perf_counter()
+        compiled_file = subprocess.run(
+            f"go run {file.name}",
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=path,
+        )
+        stop_time = perf_counter()
+
+        result = (
+            f"<b><emoji id=5821388137443626414>🌐</emoji> Language:\n</b>"
+            f"<code>Go</code>\n\n"
+            f"<b><emoji id=5431376038628171216>💻</emoji> Code:</b>\n"
+            f"<pre language=go>{html.escape(code)}</pre>\n\n"
+        )
+
+        if compiled_file.stderr:
+            result += (
+                "<b><emoji id=5465665476971471368>❌</emoji> Compilation error "
+                f"with status code {compiled_file.returncode}:</b>\n"
+                f"<code>{html.escape(compiled_file.stderr)}</code>\n"
+            )
+        else:
+            result += (
+                "<b><emoji id=5472164874886846699>✨</emoji> Result:</b>\n"
+                f"<code>{html.escape(compiled_file.stdout)}</code>\n"
+            )
+            result += f"<b>Completed in {round(stop_time - start_time, 5)}s.</b>"
+
+        await message.edit_text(result)
 
 
 modules_help["compiler"] = {
-    "gcc [c code]": "Execute C code",
-    "gpp [c code]": "Execute C++ code",
+    "gcc [code]": "Execute C code",
+    "gpp [code]": "Execute C++ code",
+    "go [code]": "Execute Go code",
 }
