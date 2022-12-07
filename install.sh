@@ -75,7 +75,7 @@ API_ID=${api_id}
 API_HASH=${api_hash}
 
 # database name with extension.
-DATABASE_NAME=${db_name}
+DB_NAME=${db_name}
 EOL
 
 
