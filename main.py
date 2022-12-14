@@ -92,11 +92,15 @@ if __name__ == "__main__":
         if not shutil.which("termux-setup-storage"):
             try:
                 import uvloop
-
+                
                 uvloop.install()
             except ImportError:
                 subprocess.run("pip install uvloop", shell=True)
                 restart()
 
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(main())
+        if platform.python_version_tuple() >= ("3", "11"):
+            with asyncio.Runner() as runner:
+                runner.get_loop().run_until_complete(main())
+        else:
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(main())
