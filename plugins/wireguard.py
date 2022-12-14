@@ -17,17 +17,18 @@ from utils.scripts import full_name
 
 
 text_template = (
-            "<emoji id=5472164874886846699>✨</emoji> Твой сгенерированный конфиг для WireGuard:\n\n"
-            "<b><emoji id=5818865088970362886>❕</b></emoji><b> Инструкция по установке:\n"
-            "</b>Android/IOS:\n"
-            '1. Скачать приложение из <a href="https://play.google.com/store/apps/details?id=com.wireguard.android">Play Market</a> или <a href="https://apps.apple.com/ru/app/wireguard/id1441195209">App Store</a>\n'
-            "2. Нажать на плюсик и импортировать файл конфигурации или отсканировать QR код\n"
-            "3. Включить VPN\n\n"
-            "Windows/MacOS/Linux:\n"
-            '1. Скачать приложение с <a href="https://www.wireguard.com/install/">официального сайта</a>\n'
-            "2. Импортировать файл конфигурации\n"
-            "3. Включить VPN\n\n"
+    "<emoji id=5472164874886846699>✨</emoji> Твой сгенерированный конфиг для WireGuard:\n\n"
+    "<b><emoji id=5818865088970362886>❕</b></emoji><b> Инструкция по установке:\n"
+    "</b>Android/IOS:\n"
+    '1. Скачать приложение из <a href="https://play.google.com/store/apps/details?id=com.wireguard.android">Play Market</a> или <a href="https://apps.apple.com/ru/app/wireguard/id1441195209">App Store</a>\n'
+    "2. Нажать на плюсик и импортировать файл конфигурации или отсканировать QR код\n"
+    "3. Включить VPN\n\n"
+    "Windows/MacOS/Linux:\n"
+    '1. Скачать приложение с <a href="https://www.wireguard.com/install/">официального сайта</a>\n'
+    "2. Импортировать файл конфигурации\n"
+    "3. Включить VPN\n\n"
 )
+
 
 def remove_readonly(func, path, _):
     "Clear the readonly bit and reattempt the removal"
@@ -39,7 +40,6 @@ class ConfigParser:
     def __init__(self):
         self.filename = ""
         self.sections = []
-
 
     def read(self, filename):
         self.filename = filename
@@ -83,6 +83,7 @@ class ConfigParser:
                                 file.write(f"{k} = {value}\n")
                 file.write("\n")
 
+
 class WireGuard:
     def __init__(self):
         self.config_parser = ConfigParser()
@@ -113,7 +114,6 @@ class WireGuard:
         for section in self.config_parser.sections:
             peers.extend(section for key, val in section.items() if key == "Peer")
         return peers
-
 
     def create_client_config(self, peer_id: int, private_key: str, address: str, shared_key: str):
         server_ip = subprocess.run(
@@ -200,7 +200,6 @@ class WireGuard:
         self.config_parser.write()
         self.restart_service()
 
-
     def remove_peer(self, peer_id: int):
         if not self.get_peer(peer_id):
             raise ValueError(f"Peer with {peer_id=} does not exist")
@@ -228,7 +227,6 @@ class WireGuard:
         with open(f"/etc/wireguard/clients/peer{peer_id}/qrcode.jpg", "rb") as file:
             return BytesIO(file.read())
 
-
     def get_peer(self, peer_id: int) -> typing.Union[dict, None]:
         for section in self.config_parser.sections:
             for key, val in section.items():
@@ -238,7 +236,6 @@ class WireGuard:
                             for comment in v:
                                 if comment == f"Id: {peer_id}":
                                     return True
-
 
     def install(self) -> None:
         subprocess.run(
@@ -265,7 +262,7 @@ class WireGuard:
         subprocess.run(
             "wg genkey | tee /etc/wireguard/privatekey | "
             "wg pubkey | tee /etc/wireguard/publickey",
-            shell=True
+            shell=True,
         )
         os.chmod("/etc/wireguard/privatekey", 0o600)
 
@@ -323,7 +320,11 @@ async def wg_install(_: Client, message: Message):
         return
     wg = WireGuard()
 
-    if len(message.command) > 1 and message.command[1] in ["-y", "--yes"] or not shutil.which("wg"):
+    if (
+        len(message.command) > 1
+        and message.command[1] in ["-y", "--yes"]
+        or not shutil.which("wg")
+    ):
         await message.edit_text("<b>Installing WireGuard...</b>")
         wg.install()
         await message.edit_text("<b>✨ WireGuard installed!</b>")
@@ -361,6 +362,7 @@ async def wg_uninstall(_: Client, message: Message):
             f"<b>Use</b> <code>{prefix}wgu -y</code> <b>to confirm</b>"
         )
 
+
 @Client.on_message(filters.command(["wga"], prefix) & filters.me)
 async def wg_add(client: Client, message: Message):
     if os.geteuid() != 0:
@@ -397,13 +399,16 @@ async def wg_add(client: Client, message: Message):
 
     note = message.text.split(" ", 2)[2] if len(message.command) > 2 else "None"
 
-    wg.add_peer(user_id=user_id, comments=[
-        f"Id: {user_id}",
-        f"Name: {full_name(peer)}",
-        f"Username: {peer.username}",
-        f"Reg_date: {datetime.datetime.now().timestamp()}",
-        f"Note: {note}"
-    ])
+    wg.add_peer(
+        user_id=user_id,
+        comments=[
+            f"Id: {user_id}",
+            f"Name: {full_name(peer)}",
+            f"Username: {peer.username}",
+            f"Reg_date: {datetime.datetime.now().timestamp()}",
+            f"Note: {note}",
+        ],
+    )
     await client.send_document(message.chat.id, wg.get_peer_config(user_id), file_name="vpn.conf")
     await client.send_photo(
         message.chat.id,
@@ -439,6 +444,7 @@ async def wg_remove(_: Client, message: Message):
     wg.remove_peer(user_id)
     await message.edit_text(f"<b>User ID: {user_id} removed from WireGuard</b>")
 
+
 @Client.on_message(filters.command(["wgs"], prefix) & filters.me)
 async def wg_show(client: Client, message: Message):
     if os.geteuid() != 0:
@@ -470,6 +476,7 @@ async def wg_show(client: Client, message: Message):
         wg.get_peer_qr(user_id),
         caption=text_template,
     )
+
 
 @Client.on_message(filters.command(["wgl"], prefix) & filters.me)
 async def wg_list(_: Client, message: Message):
@@ -503,6 +510,7 @@ async def wg_list(_: Client, message: Message):
                 text += f"<b>{key}:</b> <code>{value}</code>\n" if value != "None" else ""
         text += "\n"
     await message.edit_text(text)
+
 
 modules_help["wireguard"] = {
     "wgi": "Install WireGuard",
