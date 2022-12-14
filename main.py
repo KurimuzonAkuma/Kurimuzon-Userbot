@@ -92,7 +92,7 @@ if __name__ == "__main__":
         if not shutil.which("termux-setup-storage"):
             try:
                 import uvloop
-                
+
                 uvloop.install()
             except ImportError:
                 subprocess.run("pip install uvloop", shell=True)
