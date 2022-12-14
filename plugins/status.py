@@ -27,7 +27,7 @@ async def status(_, message: Message):
     text += f"<b>Python:</b> <code>{sys.version}</code>\n"
     text += f"<b>Pyrogram:</b> <code>{pyrogram.__version__}</code>\n"
     text += f"<b>OS:</b> <code>{sys.platform}</code>\n"
-    kernel_version = subprocess.run(["uname", "-r"], capture_output=True).stdout.decode().strip()
+    kernel_version = subprocess.run(["uname", "-a"], capture_output=True).stdout.decode().strip()
     text += f"<b>Kernel:</b> <code>{kernel_version}</code>\n"
     system_uptime = subprocess.run(["uptime", "-p"], capture_output=True).stdout.decode().strip()
     text += f"<b>Uptime:</b> <code>{system_uptime}</code>\n\n"
