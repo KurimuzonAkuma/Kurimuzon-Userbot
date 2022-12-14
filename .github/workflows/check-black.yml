@@ -21,4 +21,4 @@ jobs:
         pip install black
     - name: Check code with black
       run: |
-        black --check --diff --no-color .
+        black --check --diff --no-color --line-length 99 .
