@@ -7,7 +7,7 @@ import pyrogram
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.misc import bot_uptime, modules_help, prefix, repo, commits
+from utils.misc import bot_uptime, commits, modules_help, prefix, repo
 
 
 @Client.on_message(filters.command(["status", "статус"], prefix) & filters.me)
