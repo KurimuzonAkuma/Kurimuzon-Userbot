@@ -235,7 +235,7 @@ class WireGuard:
                         if k == "Comments":
                             for comment in v:
                                 if comment == f"Id: {peer_id}":
-                                    return True
+                                    return section
 
     def install(self) -> None:
         subprocess.run(
@@ -288,6 +288,15 @@ class WireGuard:
                 "PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE\n"
                 "PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth+ -j MASQUERADE\n"
             )
+
+        with open("/etc/sysctl.conf", "r") as f:
+            lines = f.readlines()
+        with open("/etc/sysctl.conf", "w") as f:
+            for line in lines:
+                if line.startswith("#net.ipv4.ip_forward=1"):
+                    f.write("net.ipv4.ip_forward=1")
+                else:
+                    f.write(line)
 
         subprocess.run(
             "systemctl enable wg-quick@wg0.service",
@@ -381,8 +390,13 @@ async def wg_add(client: Client, message: Message):
     user_id = message.chat.id
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
-    elif len(message.command) > 1 and message.command[1].isdigit():
-        user_id = int(message.command[1])
+    elif len(message.command) > 1:
+        if (
+            message.command[1].startswith("-")
+            and message.command[1][1:].isdigit()
+            or message.command[1].isdigit()
+        ):
+            user_id = int(message.command[1])
 
     if wg.get_peer(user_id):
         await message.edit_text("<b>User already exists</b>")
@@ -435,8 +449,13 @@ async def wg_remove(_: Client, message: Message):
     user_id = message.chat.id
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
-    elif len(message.command) > 1 and message.command[1].isdigit():
-        user_id = int(message.command[1])
+    elif len(message.command) > 1:
+        if (
+            message.command[1].startswith("-")
+            and message.command[1][1:].isdigit()
+            or message.command[1].isdigit()
+        ):
+            user_id = int(message.command[1])
 
     if not wg.get_peer(user_id):
         await message.edit_text("<b>User does not exist</b>")
@@ -463,8 +482,13 @@ async def wg_show(client: Client, message: Message):
     user_id = message.chat.id
     if message.reply_to_message:
         user_id = message.reply_to_message.from_user.id
-    elif len(message.command) > 1 and message.command[1].isdigit():
-        user_id = int(message.command[1])
+    elif len(message.command) > 1:
+        if (
+            message.command[1].startswith("-")
+            and message.command[1][1:].isdigit()
+            or message.command[1].isdigit()
+        ):
+            user_id = int(message.command[1])
 
     if not wg.get_peer(user_id):
         await message.edit_text("<b>User does not exist</b>")
