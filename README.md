@@ -44,15 +44,16 @@ Subsequent launch:
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.misc import modules_help, prefix
+from utils.misc import modules_help
+from utils.filters import command
 
 
-@Client.on_message(filters.command("example_edit", prefix) & filters.me)
-async def example_edit(client: Client, message: Message):
+@Client.on_message(command("example_edit") & filters.me)
+async def example_edit(_: Client, message: Message):
     await message.edit("<code>This is an example module</code>")
 
 
-@Client.on_message(filters.command("example_send", prefix) & filters.me)
+@Client.on_message(command("example_send") & filters.me)
 async def example_send(client: Client, message: Message):
     await client.send_message(message.chat.id, "<b>This is an example module</b>")
 
