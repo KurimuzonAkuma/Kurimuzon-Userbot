@@ -11,7 +11,7 @@ async def set_prefix(_, message: Message):
     if len(message.command) == 1:
         await message.edit_text(
             f"Current prefix: <code>{prefix}</code>\n"
-            f"To change prefix use <code>{prefix}kp [new prefix]</code>"
+            f"To change prefix use <code>{prefix}{message.command[0]} [new prefix]</code>"
         )
         return
     _prefix = message.command[1]
