@@ -4,11 +4,12 @@ from time import perf_counter
 
 from pyrogram import Client, filters, types
 
-from utils.misc import modules_help, prefix
+from utils.filters import command
+from utils.misc import modules_help
 from utils.scripts import with_args
 
 
-@Client.on_message(filters.command(["shell", "sh"], prefix) & filters.me)
+@Client.on_message(command(["shell", "sh"]) & filters.me)
 @with_args("<b>Command is not provided</b>")
 async def shell(_, message: types.Message):
     await message.edit("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")

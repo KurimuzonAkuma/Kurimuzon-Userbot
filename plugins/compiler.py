@@ -8,7 +8,8 @@ from time import perf_counter
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.misc import modules_help, prefix
+from utils.filters import command
+from utils.misc import modules_help
 from utils.scripts import with_args
 
 
@@ -64,7 +65,7 @@ async def compile(message: Message, compiler: str, lang: str):
     await message.edit_text(result)
 
 
-@Client.on_message(filters.command(["gcc", "gpp"], prefix) & filters.me)
+@Client.on_message(command(["gcc", "gpp"]) & filters.me)
 @with_args("<b>Code is not provided</b>")
 async def gnu_compiler(_, message: Message):
     if message.command[0] == "gcc":
@@ -73,7 +74,7 @@ async def gnu_compiler(_, message: Message):
         await compile(message, "g++", "C++")
 
 
-@Client.on_message(filters.command(["go"], prefix) & filters.me)
+@Client.on_message(command(["go"]) & filters.me)
 @with_args("<b>Code is not provided</b>")
 async def go_compiler(_, message: Message):
     await message.edit_text("<i><emoji id=5821116867309210830>🔃</emoji> Compiling Go code...</i>")

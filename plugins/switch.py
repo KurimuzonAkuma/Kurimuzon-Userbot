@@ -1,14 +1,15 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.misc import modules_help, prefix
+from utils.filters import command
+from utils.misc import modules_help
 
 ru_keys = """ёйцукенгшщзхъфывапролджэячсмитьбю.Ё"№;%:?ЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭ/ЯЧСМИТЬБЮ,"""
 en_keys = """`qwertyuiop[]asdfghjkl;'zxcvbnm,./~@#$%^&QWERTYUIOP{}ASDFGHJKL:"|ZXCVBNM<>?"""
 table = str.maketrans(ru_keys + en_keys, en_keys + ru_keys)
 
 
-@Client.on_message(filters.command(["switch", "sw"], prefix) & filters.me)
+@Client.on_message(command(["switch", "sw"]) & filters.me)
 async def switch(client: Client, message: Message):
     if len(message.command) == 1:
         if message.reply_to_message:

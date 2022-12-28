@@ -3,8 +3,9 @@ import re
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.misc import modules_help, prefix
-from utils.scripts import startswith, with_args, with_premium
+from utils.filters import command
+from utils.misc import modules_help
+from utils.scripts import with_args, with_premium
 
 # don't look at this code, it's a mess :(
 
@@ -445,12 +446,12 @@ async def convert_to_emojis(text: str, emoji_map: dict, lower: bool = False):
     return result
 
 
-@Client.on_message(startswith(f"{prefix}т") & filters.me)
+@Client.on_message(command("t") & filters.me)
 @with_premium
 @with_args("<b>No text for change provided</b>")
-async def colored_text(client: Client, message: Message):
-    map_number, text = message.text.split(maxsplit=1)
-    map_number = int(map_number.strip(f"{prefix}т"))
+async def colored_text(_: Client, message: Message):
+    _, map_number, text = message.text.split(maxsplit=2)
+    map_number = int(map_number)
     is_lower = False
     if map_number == 1:
         emoji_map = emoji_maps["kikoriki_emoji_map"]
@@ -475,8 +476,8 @@ async def colored_text(client: Client, message: Message):
 
 
 modules_help["text"] = {
-    "т1 [text]": "Convert regular text to kikoriki custom emojis",
-    "т2 [text]": "Convert regular text to 2ch custom emojis",
-    "т3 [text]": "Convert regular text to black custom emojis",
-    "т4 [text]": "Convert regular text to animated pink custom emojis",
+    "t 1 [text]": "Convert regular text to kikoriki custom emojis",
+    "t 2 [text]": "Convert regular text to 2ch custom emojis",
+    "t 3 [text]": "Convert regular text to black custom emojis",
+    "t 4 [text]": "Convert regular text to animated pink custom emojis",
 }

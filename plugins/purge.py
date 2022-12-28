@@ -3,17 +3,18 @@ import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.misc import modules_help, prefix
+from utils.filters import command
+from utils.misc import modules_help
 from utils.scripts import with_reply
 
 
-@Client.on_message(filters.command("del", prefix) & filters.me)
+@Client.on_message(command("del") & filters.me)
 async def del_msg(_, message: Message):
     await message.delete()
     await message.reply_to_message.delete()
 
 
-@Client.on_message(filters.command("purge", prefix) & filters.me)
+@Client.on_message(command("purge") & filters.me)
 @with_reply
 async def purge(client: Client, message: Message):
     chunk = []

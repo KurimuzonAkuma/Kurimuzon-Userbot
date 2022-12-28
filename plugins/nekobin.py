@@ -1,11 +1,12 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.misc import modules_help, prefix
+from utils.filters import command
+from utils.misc import modules_help
 from utils.scripts import paste_neko, with_args
 
 
-@Client.on_message(filters.command(["nekobin", "neko"], prefix) & filters.me)
+@Client.on_message(command(["nekobin", "neko"]) & filters.me)
 @with_args("<b>Text to paste is not provided</b>")
 async def nekobin(client: Client, message: Message):
     await message.edit_text("<code>Pasting...</code>")

@@ -3,10 +3,11 @@ from time import perf_counter
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.misc import modules_help, prefix
+from utils.filters import command
+from utils.misc import modules_help
 
 
-@Client.on_message(filters.command(["ping", "p"], prefix) & filters.me)
+@Client.on_message(command(["ping", "p"]) & filters.me)
 async def ping(_, message: Message):
     start = perf_counter()
     await message.edit("<b>Pong!</b>")

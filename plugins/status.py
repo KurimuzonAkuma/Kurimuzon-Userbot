@@ -7,24 +7,26 @@ import pyrogram
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.misc import bot_uptime, modules_help, prefix, repo
-from utils.scripts import get_commits_count
+from utils.filters import command
+from utils.misc import bot_uptime, modules_help
+from utils.scripts import get_commits, get_prefix
 
 
-@Client.on_message(filters.command(["status", "статус"], prefix) & filters.me)
+@Client.on_message(command(["status", "статус"]) & filters.me)
 async def status(_, message: Message):
     await message.edit("<code>Getting info...</code>")
 
-    commits = get_commits_count()
+    prefix = get_prefix()
+    commits = get_commits()
 
     text = "<b>===== Bot status =====</b>\n"
     text += f"<b>Prefix:</b> <code>{prefix}</code>\n"
     text += f"<b>Plugins:</b> <code>{len(modules_help)}</code>\n"
     text += "<b>Current version:</b> "
-    text += f"<code>{repo.head.commit.hexsha[:7]} ({commits.get('current')})</code>\n"
-    text += f"<b>Latest version:</b> <code>{repo.remotes.origin.refs.master.commit.hexsha[:7]}"
+    text += f"<code>{commits.get('current_hash')[:7]} ({commits.get('current')})</code>\n"
+    text += f"<b>Latest version:</b> <code>{commits.get('latest_hash')[:7]}"
     text += f" ({commits.get('latest')})</code>\n"
-    text += f"<b>Branch:</b> <code>{repo.active_branch}</code>\n"
+    text += f"<b>Branch:</b> <code>{commits.get('branch')}</code>\n"
     text += f"<b>Uptime:</b> <code>{datetime.timedelta(seconds=perf_counter() - bot_uptime)}</code>\n\n"
 
     text += "<b>===== System info =====</b>\n"

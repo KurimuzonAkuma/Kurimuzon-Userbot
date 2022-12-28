@@ -12,8 +12,8 @@ from pyrogram.enums import ParseMode
 
 from utils import config
 from utils.db import db
-from utils.misc import repo, script_path
-from utils.scripts import CustomFormatter, restart
+from utils.misc import script_path
+from utils.scripts import CustomFormatter, get_commits, restart
 
 if script_path != os.getcwd():
     os.chdir(script_path)
@@ -31,11 +31,13 @@ async def main():
         handlers=[stdout_handler],
     )
 
+    commits = get_commits()
+
     app = Client(
         "KurimuzonUserbot",
         api_hash=config.api_hash,
         api_id=config.api_id,
-        app_version=f"@ {repo.active_branch}-{repo.head.commit.hexsha[:7]}",
+        app_version=f"@ {commits.get('branch')}-{commits.get('current_hash')[:7]}",
         device_model="Kurimuzon-Userbot",
         hide_password=True,
         plugins=dict(root="plugins"),
@@ -59,12 +61,12 @@ async def main():
                 text=f"<code>Restarted in {perf_counter() - updater['time']:.3f}s...</code>",
             )
         elif updater["type"] == "update":
-            if updater["version"] == repo.head.commit.hexsha:
-                update_text = f"Userbot is up to date with {repo.active_branch} branch"
+            if updater["version"] == commits.get("current_hash"):
+                update_text = f"Userbot is up to date with {commits.get('branch')} branch"
             else:
                 update_text = (
                     f"Userbot succesfully updated {updater['version'][:7]}.."
-                    f"{repo.head.commit.hexsha[:7]}"
+                    f"{commits.get('current_hash')[:7]}"
                 )
             logging.info(f"{app.me.username}#{app.me.id} | {update_text}.")
             await app.edit_message_text(
@@ -78,8 +80,8 @@ async def main():
         db.remove("core.updater", "restart_info")
     else:
         logging.info(
-            f"{app.me.username}#{app.me.id} on {repo.active_branch}"
-            f"@{repo.head.commit.hexsha[:7]}"
+            f"{app.me.username}#{app.me.id} on {commits.get('branch')}"
+            f"@{commits.get('current_hash')[:7]}"
             " | Userbot succesfully started."
         )
 
@@ -89,6 +91,10 @@ async def main():
 
 if __name__ == "__main__":
     with contextlib.suppress(KeyboardInterrupt, SystemExit):
+        if platform.system() == "Windows":
+            logging.error("Windows is not supported!")
+            exit()
+
         if not shutil.which("termux-setup-storage"):
             try:
                 import uvloop

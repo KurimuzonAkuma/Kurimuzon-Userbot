@@ -8,4 +8,3 @@ script_path = pathlib.Path(__file__).parent.parent
 modules_help = {}
 
 bot_uptime = perf_counter()
-prefix = db.get("core.main", "prefix", default=".")

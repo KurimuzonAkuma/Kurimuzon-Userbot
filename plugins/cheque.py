@@ -4,8 +4,9 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 
 from utils.db import db
-from utils.misc import modules_help, prefix
-from utils.scripts import viabot, with_args
+from utils.filters import command, viabot
+from utils.misc import modules_help
+from utils.scripts import with_args
 
 
 @Client.on_message(viabot("CryptoBot") & ~filters.me)
@@ -26,7 +27,7 @@ async def cheque_hunter(client: Client, message: Message):
         await client.send_message("CryptoBot", f"/start {cheque}")
 
 
-@Client.on_message(filters.me & filters.command("cheque", prefixes=prefix))
+@Client.on_message(filters.me & command("cheque"))
 @with_args("<b>Argument on/off required!</b>")
 async def cheque_toggle(_: Client, message: Message):
     if message.command[1] == "on":

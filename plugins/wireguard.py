@@ -10,8 +10,9 @@ from pyrogram import Client, filters
 from pyrogram.errors import PeerIdInvalid
 from pyrogram.types import Message, User
 
-from utils.misc import modules_help, prefix
-from utils.scripts import full_name
+from utils.filters import command
+from utils.misc import modules_help
+from utils.scripts import full_name, get_prefix
 
 # i hope someone will refactor this cringe...
 
@@ -322,12 +323,15 @@ class WireGuard:
         )
 
 
-@Client.on_message(filters.command(["wgi"], prefix) & filters.me)
+@Client.on_message(command(["wgi"]) & filters.me)
 async def wg_install(_: Client, message: Message):
+
     if os.geteuid() != 0:
         await message.edit("<b>This command must be run as root!</b>")
         return
     wg = WireGuard()
+
+    prefix = get_prefix()
 
     if (
         len(message.command) > 1
@@ -345,11 +349,13 @@ async def wg_install(_: Client, message: Message):
         )
 
 
-@Client.on_message(filters.command(["wgu"], prefix) & filters.me)
+@Client.on_message(command(["wgu"]) & filters.me)
 async def wg_uninstall(_: Client, message: Message):
     if os.geteuid() != 0:
         await message.edit("<b>This command must be run as root!</b>")
         return
+
+    prefix = get_prefix()
 
     if not shutil.which("wg"):
         await message.edit_text(
@@ -372,11 +378,13 @@ async def wg_uninstall(_: Client, message: Message):
         )
 
 
-@Client.on_message(filters.command(["wga"], prefix) & filters.me)
+@Client.on_message(command(["wga"]) & filters.me)
 async def wg_add(client: Client, message: Message):
     if os.geteuid() != 0:
         await message.edit("<b>This command must be run as root!</b>")
         return
+
+    prefix = get_prefix()
 
     if not shutil.which("wg"):
         await message.edit_text(
@@ -431,11 +439,13 @@ async def wg_add(client: Client, message: Message):
     )
 
 
-@Client.on_message(filters.command(["wgr"], prefix) & filters.me)
+@Client.on_message(command(["wgr"]) & filters.me)
 async def wg_remove(_: Client, message: Message):
     if os.geteuid() != 0:
         await message.edit("<b>This command must be run as root!</b>")
         return
+
+    prefix = get_prefix()
 
     if not shutil.which("wg"):
         await message.edit_text(
@@ -464,11 +474,13 @@ async def wg_remove(_: Client, message: Message):
     await message.edit_text(f"<b>User ID: {user_id} removed from WireGuard</b>")
 
 
-@Client.on_message(filters.command(["wgs"], prefix) & filters.me)
+@Client.on_message(command(["wgs"]) & filters.me)
 async def wg_show(client: Client, message: Message):
     if os.geteuid() != 0:
         await message.edit("<b>This command must be run as root!</b>")
         return
+
+    prefix = get_prefix()
 
     if not shutil.which("wg"):
         await message.edit_text(
@@ -502,11 +514,13 @@ async def wg_show(client: Client, message: Message):
     )
 
 
-@Client.on_message(filters.command(["wgl"], prefix) & filters.me)
+@Client.on_message(command(["wgl"]) & filters.me)
 async def wg_list(_: Client, message: Message):
     if os.geteuid() != 0:
         await message.edit("<b>This command must be run as root!</b>")
         return
+
+    prefix = get_prefix()
 
     if not shutil.which("wg"):
         await message.edit_text(

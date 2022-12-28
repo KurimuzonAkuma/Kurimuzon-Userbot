@@ -6,12 +6,13 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 
 from utils.db import db
-from utils.misc import modules_help, prefix, repo
-from utils.scripts import format_exc, restart
+from utils.filters import command
+from utils.misc import modules_help
+from utils.scripts import format_exc, get_commits, restart
 
 
-@Client.on_message(filters.command(["restart", "рестарт"], prefix) & filters.me)
-async def _restart(client: Client, message: Message):
+@Client.on_message(command(["restart", "рестарт"]) & filters.me)
+async def _restart(_: Client, message: Message):
     db.set(
         "core.updater",
         "restart_info",
@@ -26,8 +27,9 @@ async def _restart(client: Client, message: Message):
     restart()
 
 
-@Client.on_message(filters.command(["update", "апдейт"], prefix) & filters.me)
-async def _update(client: Client, message: Message):
+@Client.on_message(command(["update", "апдейт"]) & filters.me)
+async def _update(_: Client, message: Message):
+    repo = get_commits()
     db.set(
         "core.updater",
         "restart_info",
@@ -35,7 +37,7 @@ async def _update(client: Client, message: Message):
             "chat_id": message.chat.id,
             "message_id": message.id,
             "time": perf_counter(),
-            "version": repo.head.commit.hexsha,
+            "version": repo.get("current_hash"),
             "type": "update",
         },
     )

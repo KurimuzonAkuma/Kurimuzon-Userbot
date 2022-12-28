@@ -1,14 +1,14 @@
 import logging
 import os
 import sys
-from typing import List, Union
 
 import aiohttp
 import git
-from pyrogram import Client, errors, types
-from pyrogram.filters import Filter
+from pyrogram import Client, errors
+from pyrogram.types import Message, User
 
-from utils.misc import modules_help, prefix, script_path
+from utils.db import db
+from utils.misc import modules_help, script_path
 
 
 class CustomFormatter(logging.Formatter):
@@ -36,55 +36,11 @@ class CustomFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-class startswith(Filter, set):
-    """Filter messages starting with text.
-
-    Parameters:
-        ignore_case (``bool``, *optional*):
-            Pass True to ignore case sensitivity.
-            Defaults to True.
-    """
-
-    def __init__(self, text: str, ignore_case: bool = True):
-        super().__init__()
-        self.text = text
-        self.ignore_case = ignore_case
-
-    async def __call__(self, _, message: types.Message):
-        mtext = message.text or message.caption
-        if not mtext:
-            return False
-        if self.ignore_case:
-            mtext = mtext.lower()
-        return bool(mtext.startswith(self.text))
-
-
-class viabot(Filter, set):
-    """Filter messages coming with via_bot.
-
-    Parameters:
-        bots (``int`` | ``str`` | ``list``):
-            Pass one or more bot ids/usernames to filter.
-            Defaults to None (any bot).
-    """
-
-    def __init__(self, bots: Union[int, str, List[Union[int, str]]] = None):
-        bots = [] if bots is None else bots if isinstance(bots, list) else [bots]
-
-        super().__init__(bot.lower().strip("@") if isinstance(bot, str) else bot for bot in bots)
-
-    async def __call__(self, _, message: types.Message):
-        return message.via_bot and (
-            message.via_bot.id in self
-            or (message.via_bot.username and message.via_bot.username.lower() in self)
-        )
-
-
 def restart():
     os.execvp(sys.executable, [sys.executable, "main.py"])
 
 
-def full_name(user: types.User) -> str:
+def full_name(user: User) -> str:
     return f"{user.first_name} {user.last_name}" if user.last_name else user.first_name
 
 
@@ -99,7 +55,7 @@ def format_exc(e: Exception, suffix="") -> str:
 
 
 def with_reply(func):
-    async def wrapped(client: Client, message: types.Message):
+    async def wrapped(client: Client, message: Message):
         if not message.reply_to_message:
             await message.edit("<b>Reply to message is required</b>")
         else:
@@ -110,7 +66,7 @@ def with_reply(func):
 
 def with_args(text: str):
     def decorator(func):
-        async def wrapped(client: Client, message: types.Message):
+        async def wrapped(client: Client, message: Message):
             if message.text and len(message.text.split()) == 1:
                 await message.edit(text)
             else:
@@ -122,7 +78,7 @@ def with_args(text: str):
 
 
 def with_premium(func):
-    async def wrapped(client: Client, message: types.Message):
+    async def wrapped(client: Client, message: Message):
         if not (await client.get_me()).is_premium:
             await message.edit("<b>Premium account is required</b>")
         else:
@@ -139,7 +95,7 @@ def format_module_help(module_name: str, full=True):
     for command, desc in commands.items():
         cmd = command.split(maxsplit=1)
         args = f" <code>{cmd[1]}</code>" if len(cmd) > 1 else ""
-        help_text += f"<code>{prefix}{cmd[0]}</code>{args} — <i>{desc}</i>\n"
+        help_text += f"<code>{get_prefix()}{cmd[0]}</code>{args} — <i>{desc}</i>\n"
 
     return help_text
 
@@ -159,18 +115,20 @@ async def paste_neko(code: str):
         return f"nekobin.com/{result['result']['key']}.py"
 
 
-def get_commits_count():
+def get_commits():
     repo = git.Repo(script_path)
+
+    current_hash = repo.head.commit.hexsha
+    latest_hash = repo.remotes.origin.refs.master.commit.hexsha
+
     return {
-        "latest": (
-            len(
-                list(
-                    repo.iter_commits(
-                        f"05c3cfe..{repo.remotes.origin.refs.master.commit.hexsha[:7]}"
-                    )
-                )
-            )
-            + 1
-        ),
-        "current": len(list(repo.iter_commits(f"05c3cfe..{repo.head.commit.hexsha[:7]}"))) + 1,
+        "latest": (len(list(repo.iter_commits(f"05c3cfe..{latest_hash}"))) + 1),
+        "latest_hash": latest_hash,
+        "current": len(list(repo.iter_commits(f"05c3cfe..{current_hash}"))) + 1,
+        "current_hash": current_hash,
+        "branch": repo.active_branch,
     }
+
+
+def get_prefix():
+    return db.get("core.main", "prefix", default=".")

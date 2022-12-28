@@ -8,7 +8,8 @@ from time import perf_counter
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.misc import modules_help, prefix
+from utils.filters import command
+from utils.misc import modules_help
 from utils.scripts import format_exc, paste_neko
 
 
@@ -72,9 +73,9 @@ async def interpreter_task(client: Client, message: Message):
         )
 
 
-@Client.on_message(filters.command(["py", "pyne", "rpy", "rpyne"], prefix) & filters.me)
+@Client.on_message(command(["py", "pyne", "rpy", "rpyne"]) & filters.me)
 async def user_exec(client: Client, message: Message):
-    asyncio.get_running_loop().create_task(interpreter_task(client, message))
+    client.loop.create_task(interpreter_task(client, message))
 
 
 modules_help["python"] = {

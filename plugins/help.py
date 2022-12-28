@@ -1,12 +1,14 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.misc import modules_help, prefix
-from utils.scripts import format_module_help
+from utils.filters import command
+from utils.misc import modules_help
+from utils.scripts import format_module_help, get_prefix
 
 
-@Client.on_message(filters.command(["help", "h"], prefix) & filters.me)
+@Client.on_message(command(["help", "h"]) & filters.me)
 async def help_cmd(_, message: Message):
+    prefix = get_prefix()
     if len(message.command) == 1:
         msg_edited = False
         text = f"For more help on how to use a command, type <code>{prefix}help [module]</code>\n\nAvailable Modules:\n"

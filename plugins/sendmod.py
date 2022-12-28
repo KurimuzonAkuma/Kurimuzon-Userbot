@@ -3,11 +3,12 @@ import os
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.misc import modules_help, prefix
+from utils.filters import command
+from utils.misc import modules_help
 from utils.scripts import format_exc, format_module_help, with_args
 
 
-@Client.on_message(filters.command(["sendmod", "sm"], prefix) & filters.me)
+@Client.on_message(command(["sendmod", "sm"]) & filters.me)
 @with_args("<b>Module name to send is not provided</b>")
 async def sendmod(client: Client, message: Message):
     try:
