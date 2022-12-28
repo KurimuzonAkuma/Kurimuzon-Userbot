@@ -4,9 +4,9 @@ import sys
 from typing import List, Union
 
 import aiohttp
+import git
 from pyrogram import Client, errors, types
 from pyrogram.filters import Filter
-import git
 
 from utils.misc import modules_help, prefix, script_path
 
@@ -158,6 +158,7 @@ async def paste_neko(code: str):
     else:
         return f"nekobin.com/{result['result']['key']}.py"
 
+
 def get_commits_count():
     repo = git.Repo(script_path)
     return {
@@ -171,8 +172,5 @@ def get_commits_count():
             )
             + 1
         ),
-        "current": len(
-            list(repo.iter_commits(f"05c3cfe..{repo.head.commit.hexsha[:7]}"))
-        )
-        + 1,
+        "current": len(list(repo.iter_commits(f"05c3cfe..{repo.head.commit.hexsha[:7]}"))) + 1,
     }
