@@ -6,7 +6,7 @@ from utils.misc import modules_help
 from utils.scripts import paste_neko, with_args
 
 
-@Client.on_message(command(["nekobin", "neko"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["nekobin", "neko"]) & filters.me)
 @with_args("<b>Text to paste is not provided</b>")
 async def nekobin(client: Client, message: Message):
     await message.edit_text("<code>Pasting...</code>")

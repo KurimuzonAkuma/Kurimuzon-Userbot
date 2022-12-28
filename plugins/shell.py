@@ -9,7 +9,7 @@ from utils.misc import modules_help
 from utils.scripts import with_args
 
 
-@Client.on_message(command(["shell", "sh"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["shell", "sh"]) & filters.me)
 @with_args("<b>Command is not provided</b>")
 async def shell(_, message: types.Message):
     await message.edit("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")

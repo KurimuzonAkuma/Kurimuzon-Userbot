@@ -65,7 +65,7 @@ async def compile(message: Message, compiler: str, lang: str):
     await message.edit_text(result)
 
 
-@Client.on_message(command(["gcc", "gpp"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["gcc", "gpp"]) & filters.me)
 @with_args("<b>Code is not provided</b>")
 async def gnu_compiler(_, message: Message):
     if message.command[0] == "gcc":
@@ -74,7 +74,7 @@ async def gnu_compiler(_, message: Message):
         await compile(message, "g++", "C++")
 
 
-@Client.on_message(command(["go"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["go"]) & filters.me)
 @with_args("<b>Code is not provided</b>")
 async def go_compiler(_, message: Message):
     await message.edit_text("<i><emoji id=5821116867309210830>🔃</emoji> Compiling Go code...</i>")

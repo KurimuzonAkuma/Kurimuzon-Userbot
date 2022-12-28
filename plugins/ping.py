@@ -7,7 +7,7 @@ from utils.filters import command
 from utils.misc import modules_help
 
 
-@Client.on_message(command(["ping", "p"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["ping", "p"]) & filters.me)
 async def ping(_, message: Message):
     start = perf_counter()
     await message.edit("<b>Pong!</b>")

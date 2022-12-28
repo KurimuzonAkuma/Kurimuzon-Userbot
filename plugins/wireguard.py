@@ -323,7 +323,7 @@ class WireGuard:
         )
 
 
-@Client.on_message(command(["wgi"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["wgi"]) & filters.me)
 async def wg_install(_: Client, message: Message):
 
     if os.geteuid() != 0:
@@ -349,7 +349,7 @@ async def wg_install(_: Client, message: Message):
         )
 
 
-@Client.on_message(command(["wgu"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["wgu"]) & filters.me)
 async def wg_uninstall(_: Client, message: Message):
     if os.geteuid() != 0:
         await message.edit("<b>This command must be run as root!</b>")
@@ -378,7 +378,7 @@ async def wg_uninstall(_: Client, message: Message):
         )
 
 
-@Client.on_message(command(["wga"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["wga"]) & filters.me)
 async def wg_add(client: Client, message: Message):
     if os.geteuid() != 0:
         await message.edit("<b>This command must be run as root!</b>")
@@ -439,7 +439,7 @@ async def wg_add(client: Client, message: Message):
     )
 
 
-@Client.on_message(command(["wgr"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["wgr"]) & filters.me)
 async def wg_remove(_: Client, message: Message):
     if os.geteuid() != 0:
         await message.edit("<b>This command must be run as root!</b>")
@@ -474,7 +474,7 @@ async def wg_remove(_: Client, message: Message):
     await message.edit_text(f"<b>User ID: {user_id} removed from WireGuard</b>")
 
 
-@Client.on_message(command(["wgs"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["wgs"]) & filters.me)
 async def wg_show(client: Client, message: Message):
     if os.geteuid() != 0:
         await message.edit("<b>This command must be run as root!</b>")
@@ -514,7 +514,7 @@ async def wg_show(client: Client, message: Message):
     )
 
 
-@Client.on_message(command(["wgl"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["wgl"]) & filters.me)
 async def wg_list(_: Client, message: Message):
     if os.geteuid() != 0:
         await message.edit("<b>This command must be run as root!</b>")

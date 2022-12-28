@@ -6,7 +6,7 @@ from utils.misc import modules_help
 from utils.scripts import format_module_help, get_prefix
 
 
-@Client.on_message(command(["help", "h"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["help", "h"]) & filters.me)
 async def help_cmd(_, message: Message):
     prefix = get_prefix()
     if len(message.command) == 1:

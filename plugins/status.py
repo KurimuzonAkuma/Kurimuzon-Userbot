@@ -12,7 +12,7 @@ from utils.misc import bot_uptime, modules_help
 from utils.scripts import get_commits, get_prefix
 
 
-@Client.on_message(command(["status", "статус"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["status", "статус"]) & filters.me)
 async def status(_, message: Message):
     await message.edit("<code>Getting info...</code>")
 

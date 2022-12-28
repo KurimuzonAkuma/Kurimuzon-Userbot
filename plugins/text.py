@@ -446,7 +446,7 @@ async def convert_to_emojis(text: str, emoji_map: dict, lower: bool = False):
     return result
 
 
-@Client.on_message(command("t") & filters.me)
+@Client.on_message(~filters.scheduled & command("t") & filters.me)
 @with_premium
 @with_args("<b>No text for change provided</b>")
 async def colored_text(_: Client, message: Message):

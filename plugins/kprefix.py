@@ -7,7 +7,7 @@ from utils.misc import modules_help
 from utils.scripts import get_prefix
 
 
-@Client.on_message(command(["kp", "kprefix", "prefix"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["kp", "kprefix", "prefix"]) & filters.me)
 async def set_prefix(_, message: Message):
     prefix = get_prefix()
     if len(message.command) == 1:

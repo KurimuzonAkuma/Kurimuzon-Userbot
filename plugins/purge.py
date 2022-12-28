@@ -8,13 +8,13 @@ from utils.misc import modules_help
 from utils.scripts import with_reply
 
 
-@Client.on_message(command("del") & filters.me)
+@Client.on_message(~filters.scheduled & command("del") & filters.me)
 async def del_msg(_, message: Message):
     await message.delete()
     await message.reply_to_message.delete()
 
 
-@Client.on_message(command("purge") & filters.me)
+@Client.on_message(~filters.scheduled & command("purge") & filters.me)
 @with_reply
 async def purge(client: Client, message: Message):
     chunk = []

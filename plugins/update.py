@@ -11,7 +11,7 @@ from utils.misc import modules_help
 from utils.scripts import format_exc, get_commits, restart
 
 
-@Client.on_message(command(["restart", "рестарт"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["restart", "рестарт"]) & filters.me)
 async def _restart(_: Client, message: Message):
     db.set(
         "core.updater",
@@ -27,7 +27,7 @@ async def _restart(_: Client, message: Message):
     restart()
 
 
-@Client.on_message(command(["update", "апдейт"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["update", "апдейт"]) & filters.me)
 async def _update(_: Client, message: Message):
     repo = get_commits()
     db.set(

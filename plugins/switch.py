@@ -9,7 +9,7 @@ en_keys = """`qwertyuiop[]asdfghjkl;'zxcvbnm,./~@#$%^&QWERTYUIOP{}ASDFGHJKL:"|ZX
 table = str.maketrans(ru_keys + en_keys, en_keys + ru_keys)
 
 
-@Client.on_message(command(["switch", "sw"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["switch", "sw"]) & filters.me)
 async def switch(client: Client, message: Message):
     if len(message.command) == 1:
         if message.reply_to_message:
