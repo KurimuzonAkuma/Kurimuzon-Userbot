@@ -6,8 +6,9 @@ from typing import List, Union
 import aiohttp
 from pyrogram import Client, errors, types
 from pyrogram.filters import Filter
+import git
 
-from utils.misc import modules_help, prefix
+from utils.misc import modules_help, prefix, script_path
 
 
 class CustomFormatter(logging.Formatter):
@@ -156,3 +157,22 @@ async def paste_neko(code: str):
         return "Pasting failed"
     else:
         return f"nekobin.com/{result['result']['key']}.py"
+
+def get_commits_count():
+    repo = git.Repo(script_path)
+    return {
+        "latest": (
+            len(
+                list(
+                    repo.iter_commits(
+                        f"05c3cfe..{repo.remotes.origin.refs.master.commit.hexsha[:7]}"
+                    )
+                )
+            )
+            + 1
+        ),
+        "current": len(
+            list(repo.iter_commits(f"05c3cfe..{repo.head.commit.hexsha[:7]}"))
+        )
+        + 1,
+    }

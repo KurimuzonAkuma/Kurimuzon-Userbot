@@ -7,12 +7,16 @@ import pyrogram
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.misc import bot_uptime, commits, modules_help, prefix, repo
+from utils.misc import bot_uptime, modules_help, prefix, repo
+from utils.scripts import get_commits_count
 
 
 @Client.on_message(filters.command(["status", "статус"], prefix) & filters.me)
 async def status(_, message: Message):
     await message.edit("<code>Getting info...</code>")
+
+    commits = get_commits_count()
+
     text = "<b>===== Bot status =====</b>\n"
     text += f"<b>Prefix:</b> <code>{prefix}</code>\n"
     text += f"<b>Plugins:</b> <code>{len(modules_help)}</code>\n"
