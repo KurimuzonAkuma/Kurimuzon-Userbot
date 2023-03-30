@@ -92,8 +92,9 @@ else
     echo
     echo "Choose installation type:"
     echo "[1] Systemd service"
-    echo "[2] PM2
-    echo "[3] Custom (default)"
+    echo "[2] PM2"
+    echo "[3] Docker"
+    echo "[4] Custom (default)"
     read -r -p "> " install_type
 
     case $install_type in
@@ -127,8 +128,8 @@ EOL
         echo "============================"
         echo "Great! Kurimuzon-Userbot installed successfully and running now!"
         echo "Installation type: Systemd service"
-        echo "Start with: \"sudo systemctl start Kurimuzon-Userbot\""
-        echo "Stop with: \"sudo systemctl stop Kurimuzon-Userbot\""
+        printf "Start with: \e[0;36msudo systemctl start Kurimuzon-Userbot\e[0m"
+        printf "Stop with: \e[0;36msudo systemctl start Kurimuzon-Userbot\e[0m"
         echo "============================"
         ;;
     2)
@@ -146,10 +147,62 @@ EOL
         echo "============================"
         echo "Great! Kurimuzon-Userbot installed successfully and running now!"
         echo "Installation type: PM2"
-        echo "Start with: \"pm2 start KurimuzonUserbot\""
-        echo "Stop with: \"pm2 stop KurimuzonUserbot\""
+        printf "Start with: \e[0;36mpm2 start KurimuzonUserbot\e[0m"
+        printf "Stop with: \e[0;36mpm2 stop KurimuzonUserbot\e[0m"
         echo "Process name: KurimuzonUserbot"
         echo "============================"
+        ;;
+    3)
+        if ! [ -x "$(command -v docker-compose)" ]; then
+            printf "\e[0;32mInstalling docker...\e[0m"
+            if [ -f /etc/debian_version ]; then
+                sudo apt-get install \
+                    apt-transport-https \
+                    ca-certificates \
+                    curl \
+                    gnupg-agent \
+                    software-properties-common -y
+                curl -fsSL https://download.docker.com/linux/ubuntu/gpg |
+                    sudo apt-key add -
+                sudo add-apt-repository \
+                    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+                    $(lsb_release -cs) \
+                    stable"
+                sudo apt-get update -y
+                sudo apt-get install docker-ce docker-ce-cli containerd.io -y
+            elif [ -f /etc/arch-release ]; then
+                sudo pacman -Syu docker --noconfirm
+            elif [ -f /etc/redhat-release ]; then
+                sudo yum install -y yum-utils
+                sudo yum-config-manager \
+                    --add-repo \
+                    https://download.docker.com/linux/centos/docker-ce.repo
+                sudo yum install docker-ce docker-ce-cli containerd.io -y
+            fi
+            printf "\e[0;32m - success\e[0m\n"
+            printf "\e[0;32mInstalling docker-compose...\e[0m"
+            pip install -U docker-compose
+            chmod +x /usr/local/bin/docker-compose
+            printf "\e[0;32m - success\e[0m\n"
+        else
+            printf "\e[0;32mDocker is already installed\e[0m\n"
+        fi
+
+        printf "\e[0;32mBuilding docker image...\e[0m"
+        sudo docker-compose up -d --build
+        printf "\e[0;32m - success\e[0m\n"
+
+        container_id=$(docker ps | grep LostPicsShop | cut -d" " -f1)
+
+        echo
+        echo "============================"
+        echo "Great! Kurimuzon-Userbot installed successfully!"
+        echo "Installation type: Docker"
+        printf "Start with: \e[0;36mdocker start $container_id\e[0m"
+        printf "Stop with: \e[0;36mdocker stop $container_id\e[0m"
+        echo "Process name: KurimuzonUserbot"
+        echo "============================"
+        printf "\e[0;31mAttach to docker container to continue installation using: \e[0;36mdocker attach $container_id\e[0m\n"
         ;;
     *)
         echo
