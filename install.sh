@@ -7,8 +7,8 @@ if [ -x "$(command -v termux-setup-storage)" ]; then
     pkg install python3 git clang ffmpeg wget libjpeg-turbo libcrypt ndk-sysroot zlib openssl -y || exit 2
 
     python3 -m pip install -U pip
-    export LDFLAGS="-L${PREFIX}/lib/"
-    export CFLAGS="-I${PREFIX}/include/"
+    LDFLAGS="-L${PREFIX}/lib/"
+    CFLAGS="-I${PREFIX}/include/"
     pip3 install -U wheel
 else
     if [ "$(id -u)" -ne 0 ]; then
@@ -42,27 +42,27 @@ python3 -m pip install -U -r requirements.txt || exit 2
 echo
 echo "Enter API_ID and API_HASH"
 echo "You can get it here -> https://my.telegram.org/apps"
-echo "Leave empty to use defaults"
-read -r "API_ID > " api_id
+echo "Leave empty to use defaults (please note that default keys significantly increases your ban chances)"
+read -r -p "API_ID > " api_id
 
 if [ "$api_id" = "" ]; then
   api_id="6"
   api_hash="eb06d4abfb49dc3eeb1aeb98ae0f581e"
 else
-  read -r "API_HASH > " api_hash
+  read -r -p "API_HASH > " api_hash
 fi
 
 echo
 echo "Choose database settings:"
 echo "[1] Enter name manually"
 echo "[2] Use default name"
-read -r "> " db_settings
+read -r -p "> " db_settings
 
 echo
 case $db_settings in
   1)
     echo "Please enter database name with extension [database.db]:"
-    read -r "> " db_name
+    read -r -p "> " db_name
     db_name=$db_name
     ;;
   *)
@@ -87,13 +87,14 @@ if [ -x "$(command -v termux-setup-storage)" ]; then
     echo "Start with: \"python3 main.py\""
     echo "============================"
 else
-    chown -R "$SUDO_USER":"$SUDO_USER" .
+    chown -R $SUDO_USER:$SUDO_USER .
 
     echo
     echo "Choose installation type:"
     echo "[1] Systemd service"
-    echo "[2] Custom (default)"
-    read -r "> " install_type
+    echo "[2] PM2
+    echo "[3] Custom (default)"
+    read -r -p "> " install_type
 
     case $install_type in
     1)
@@ -115,7 +116,7 @@ EOL
             if grep -q systemd=true /etc/wsl.conf; then
                 :
             else
-                printf "[boot]\nsystemd=true" >> /etc/wsl.conf
+                echo "[boot]\nsystemd=true" >> /etc/wsl.conf
             fi
         fi
         systemctl daemon-reload
@@ -128,6 +129,26 @@ EOL
         echo "Installation type: Systemd service"
         echo "Start with: \"sudo systemctl start Kurimuzon-Userbot\""
         echo "Stop with: \"sudo systemctl stop Kurimuzon-Userbot\""
+        echo "============================"
+        ;;
+    2)
+        if ! [ -x "$(command -v pm2)" ]; then
+            curl -fsSL https://deb.nodesource.com/setup_19.x | bash
+            apt install nodejs -y
+            npm install pm2 -g
+            su -c "pm2 startup" $SUDO_USER
+            env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u $SUDO_USER --hp /home/$SUDO_USER
+        fi
+        su -c "pm2 start main.py --name KurimuzonUserbot --interpreter python3" $SUDO_USER
+        su -c "pm2 save" $SUDO_USER
+
+        echo
+        echo "============================"
+        echo "Great! Kurimuzon-Userbot installed successfully and running now!"
+        echo "Installation type: PM2"
+        echo "Start with: \"pm2 start KurimuzonUserbot\""
+        echo "Stop with: \"pm2 stop KurimuzonUserbot\""
+        echo "Process name: KurimuzonUserbot"
         echo "============================"
         ;;
     *)
