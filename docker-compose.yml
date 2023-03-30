@@ -1,0 +1,16 @@
+version: '3'
+services:
+  worker:
+    container_name: "KurimuzonUserbot"
+    build:
+      context: .
+    volumes:
+      - worker:/app
+    stop_signal: SIGINT
+    restart: unless-stopped
+    command: "python3 main.py"
+    env_file:
+      - ./.env
+
+volumes:
+  worker:
