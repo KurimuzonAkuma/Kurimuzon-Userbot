@@ -1,5 +1,6 @@
+aiohttp
 environs
 GitPython
-aiohttp
+Pillow
 pyrogram
 tgcrypto
