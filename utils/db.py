@@ -33,7 +33,7 @@ class SqliteDatabase(Database):
         self._lock = threading.Lock()
 
     @staticmethod
-    def _parse_row(self, row: sqlite3.Row):
+    def _parse_row(row: sqlite3.Row):
         parse_func = {
             "bool": lambda x: x == "1",
             "int": int,
@@ -121,7 +121,7 @@ class AioSqliteDatabase(Database):
         self._lock = asyncio.Lock()
 
     @staticmethod
-    def _parse_row(self, row: aiosqlite.Row):
+    def _parse_row(row: aiosqlite.Row):
         parse_func = {
             "bool": lambda x: x == "1",
             "int": int,
