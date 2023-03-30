@@ -1,6 +1,8 @@
 aiohttp
+aiosqlite
 environs
 GitPython
 Pillow
 pyrogram
+requests
 tgcrypto
