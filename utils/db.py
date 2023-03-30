@@ -4,6 +4,7 @@ import sqlite3
 import threading
 
 import aiosqlite
+
 from utils.config import db_name
 
 
@@ -33,10 +34,12 @@ class SqliteDatabase(Database):
 
     @staticmethod
     def _parse_row(self, row: sqlite3.Row):
-        parse_func = {"bool": lambda x: x == "1",
-                      "int": int,
-                      "str": lambda x: x,
-                      "json": json.loads}
+        parse_func = {
+            "bool": lambda x: x == "1",
+            "int": int,
+            "str": lambda x: x,
+            "json": json.loads,
+        }
         return parse_func[row["type"]](row["val"])
 
     def _create_table(self, module: str):
@@ -119,10 +122,12 @@ class AioSqliteDatabase(Database):
 
     @staticmethod
     def _parse_row(self, row: aiosqlite.Row):
-        parse_func = {"bool": lambda x: x == "1",
-                      "int": int,
-                      "str": lambda x: x,
-                      "json": json.loads}
+        parse_func = {
+            "bool": lambda x: x == "1",
+            "int": int,
+            "str": lambda x: x,
+            "json": json.loads,
+        }
         return parse_func[row["type"]](row["val"])
 
     async def _create_table(self, module: str):
