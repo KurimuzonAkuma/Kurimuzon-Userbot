@@ -325,7 +325,6 @@ class WireGuard:
 
 @Client.on_message(~filters.scheduled & command(["wgi"]) & filters.me)
 async def wg_install(_: Client, message: Message):
-
     if os.geteuid() != 0:
         await message.edit("<b>This command must be run as root!</b>")
         return
