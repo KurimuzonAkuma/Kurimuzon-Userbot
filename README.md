@@ -2,7 +2,7 @@
     <br>
     <b>Kurimuzon-Userbot</b>
     <br>
-    <b>Telegram userbot inspired by <a href='https://github.com/Dragon-Userbot/Dragon-Userbot'>Dragon-Userbot</a></b>
+    <b>Telegram userbot inspired by <a href='https://github.com/Dragon-Userbot/Dragon-Userbot'><img alt="dragon" src="./dragon.png"/> Dragon-Userbot</a></b>
     <br>
     <img src="https://img.shields.io/badge/code%20style-black-000000.svg?style=for-the-badge" alt="Code style">
     <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/KurimuzonAkuma/Kurimuzon-Userbot?style=for-the-badge">
