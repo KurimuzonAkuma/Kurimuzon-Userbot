@@ -12,7 +12,7 @@ from pyrogram.enums import ParseMode
 
 from utils import config
 from utils.db import db
-from utils.misc import script_path
+from utils.misc import scheduler, scheduler_jobs, script_path
 from utils.scripts import CustomFormatter, get_commits, restart
 
 if script_path != os.getcwd():
@@ -42,7 +42,7 @@ async def main():
         # app_version=f"@ {commits.get('branch')}-{commits.get('current_hash')[:7]}",
         device_model="Redmi Redmi K40",
         system_version="13 (33)",
-        app_version="9.5.6.0",
+        app_version="9.5.8",
         lang_code="ru",
         hide_password=True,
         plugins=dict(root="plugins"),
@@ -88,6 +88,17 @@ async def main():
             f"@{commits.get('current_hash')[:7]}"
             " | Userbot succesfully started."
         )
+
+    for job in scheduler_jobs:
+        scheduler.add_job(
+            func=job.func,
+            trigger=job.trigger,
+            args=[app] + job.args,
+            kwargs=job.kwargs,
+            id=job.id,
+        )
+
+    scheduler.start()
 
     await idle()
     await app.stop()

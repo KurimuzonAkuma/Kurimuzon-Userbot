@@ -1,5 +1,6 @@
 aiohttp
 aiosqlite
+apscheduler
 environs
 GitPython
 Pillow

@@ -1,9 +1,13 @@
 import logging
 import os
 import sys
+import typing
 
 import aiohttp
 import git
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from pyrogram import Client, errors
 from pyrogram.types import Message, User
 
@@ -132,3 +136,34 @@ def get_commits():
 
 def get_prefix():
     return db.get("core.main", "prefix", default=".")
+
+
+def get_args_raw(message: typing.Union[Message, str]) -> str:
+    if isinstance(message, Message):
+        message = message.text
+    elif not isinstance(message, str):
+        return ""
+
+    return args[1] if len(args := message.split(maxsplit=1)) > 1 else ""
+
+
+class ScheduleJob:
+    def __init__(
+        self,
+        func: callable,
+        trigger: typing.Optional[typing.Union[DateTrigger, IntervalTrigger, CronTrigger]] = None,
+        *args,
+        **kwargs,
+    ):
+        self.func = func
+        self.args = args or []
+        self.kwargs = kwargs or {}
+        self.id = func.__name__
+
+        trigger_data = db.get("triggers", self.func.__name__, {"type": "interval", "value": 3600})
+        if trigger_data["type"] == "cron":
+            db_trigger = CronTrigger.from_crontab(trigger_data["value"])
+        else:
+            db_trigger = IntervalTrigger(seconds=trigger_data["value"])
+
+        self.trigger = trigger or db_trigger
