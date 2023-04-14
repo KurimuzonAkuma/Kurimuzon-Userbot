@@ -1,24 +1,22 @@
 import datetime
-import logging
+import json
 import os
 import shutil
 import subprocess
 import typing
+from enum import Enum
 from io import BytesIO
 
+import qrcode
 from pyrogram import Client, filters
-from pyrogram.errors import PeerIdInvalid
-from pyrogram.types import Message, User
+from pyrogram.types import Message
 
 from utils.filters import command
 from utils.misc import modules_help
-from utils.scripts import full_name, get_prefix
-
-# i hope someone will refactor this cringe...
-
+from utils.scripts import get_args_raw, get_full_name, get_prefix
 
 text_template = (
-    "<emoji id=5472164874886846699>✨</emoji> Твой сгенерированный конфиг для WireGuard:\n\n"
+    "<emoji id=5472164874886846699>✨</emoji> Твой конфиг для WireGuard:\n\n"
     "<b><emoji id=5818865088970362886>❕</b></emoji><b> Инструкция по установке:\n"
     "</b>Android/IOS:\n"
     '1. Скачать приложение из <a href="https://play.google.com/store/apps/details?id=com.wireguard.android">Play Market</a> или <a href="https://apps.apple.com/ru/app/wireguard/id1441195209">App Store</a>\n'
@@ -31,264 +29,311 @@ text_template = (
 )
 
 
-def remove_readonly(func, path, _):
-    "Clear the readonly bit and reattempt the removal"
-    os.chmod(path, 0o0200)
-    func(path)
+def check_wireguard_installed(func):
+    async def wrapped(client: Client, message: Message):
+        if os.geteuid() != 0:
+            return await message.edit("<b>This command must be run as root!</b>")
+
+        if not shutil.which("wg"):
+            return await message.edit_text(
+                "<b>WireGuard is not installed!</b>\n"
+                f"<b>Use</b> <code>{get_prefix()}wgi</code> <b>to install</b>"
+            )
+
+        return await func(client, message)
+
+    return wrapped
 
 
-class ConfigParser:
-    def __init__(self):
-        self.filename = ""
-        self.sections = []
+def sh_exec(cmd: str) -> str:
+    return subprocess.run(
+        cmd,
+        shell=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
 
-    def read(self, filename):
-        self.filename = filename
-        with open(self.filename, "r") as file:
-            for line in file:
-                # get rid of the newline
-                line = line.strip()
-                try:
-                    if line:
-                        if line.startswith("["):
-                            section = line.strip("[]")
-                            self.sections.append({section: {}})
-                        else:
-                            if line.startswith("#"):
-                                self.sections[-1][section]["Comments"] = self.sections[-1][
-                                    section
-                                ].get("Comments", []) + [line.lstrip("#").strip()]
-                                continue
-                            (key, val) = line.split("=", 1)
-                            key = key.strip()
-                            val = val.strip()
-                            if key not in self.sections[-1][section]:
-                                self.sections[-1][section][key] = []
-                            self.sections[-1][section][key].append(val.strip())
-                except Exception as e:
-                    logging.warning(f"WG | {str(e)} - line:{line}")
 
-        return self.sections
+def get_user_id(message: Message) -> int:
+    user_id = message.chat.id
+    args = get_args_raw(message)
 
-    def write(self):
-        with open(self.filename, "w") as file:
-            for section in self.sections:
-                for key, val in section.items():
-                    file.write(f"[{key}]\n")
-                    for k, v in val.items():
-                        if k == "Comments":
-                            for comment in v:
-                                file.write(f"# {comment}\n")
-                        else:
-                            for value in v:
-                                file.write(f"{k} = {value}\n")
-                file.write("\n")
+    if message.reply_to_message:
+        user_id = message.reply_to_message.from_user.id
+    if args and args.split(maxsplit=1)[0].lstrip("-").isdigit():
+        user_id = int(args)
+
+    return user_id
+
+
+class ClientErrorType(Enum):
+    NAME_REQUIRED = 0
+    CLIENT_ID_REQUIRED = 1
+    CLIENT_ALREADY_EXIST = 2
+    ADDRESS_LIMIT_REACHED = 3
 
 
 class WireGuard:
     def __init__(self):
-        self.config_parser = ConfigParser()
-        if os.path.exists("/etc/wireguard/wg0.conf"):
-            self.config_parser.read("/etc/wireguard/wg0.conf")
+        self.wg_path = "/etc/wireguard"
+        self.default_address = "10.13.13.x"
 
-        self.server_public_key = subprocess.run(
-            "cat /etc/wireguard/publickey", shell=True, capture_output=True, text=True
-        ).stdout.strip()
-        self.server_private_key = subprocess.run(
-            "cat /etc/wireguard/privatekey", shell=True, capture_output=True, text=True
-        ).stdout.strip()
+    def get_config(self) -> dict:
+        # load config from json file
+        try:
+            with open(f"{self.wg_path}/wg0.json", "r") as f:
+                config = json.load(f)
+        # generate new config if file not found
+        except FileNotFoundError:
+            private_key = sh_exec("wg genkey")
+            public_key = sh_exec(f"echo {private_key} | wg pubkey")
+            address = self.default_address.replace("x", "1")
 
-    def restart_service(self) -> None:
-        subprocess.run(
-            "systemctl restart wg-quick@wg0.service",
-            shell=True,
-        )
-
-    def get_server_public_key(self) -> str:
-        return self.server_public_key
-
-    def get_server_private_key(self) -> str:
-        return self.server_private_key
-
-    def get_all_peers(self) -> typing.List[dict]:
-        peers = []
-        for section in self.config_parser.sections:
-            peers.extend(section for key, val in section.items() if key == "Peer")
-        return peers
-
-    def create_client_config(self, peer_id: int, private_key: str, address: str, shared_key: str):
-        server_ip = subprocess.run(
-            "hostname -I | awk '{print $1}'",
-            shell=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        template = (
-            "[Interface]\n"
-            f"PrivateKey = {private_key}\n"
-            f"Address = {address}\n"
-            "DNS = 1.1.1.1, 1.0.0.1\n"
-            "\n"
-            "[Peer]\n"
-            f"PublicKey = {self.get_server_public_key()}\n"
-            f"PresharedKey = {shared_key}\n"
-            f"Endpoint = {server_ip}:51820\n"
-            "AllowedIPs = 0.0.0.0/0, ::0/0"
-        )
-        with open(f"/etc/wireguard/clients/peer{peer_id}/vpn.conf", "w") as f:
-            f.write(template)
-        subprocess.run(
-            f"qrencode -o /etc/wireguard/clients/peer{peer_id}/qrcode.jpg -r /etc/wireguard/clients/peer{peer_id}/vpn.conf",
-            shell=True,
-        )
-
-    def add_peer(self, user_id: int, comments: list = None) -> None:
-        if self.get_peer(user_id):
-            raise ValueError(f"Peer with {user_id=} already exists")
-
-        if len(self.config_parser.sections) < 2:
-            allowed_ips = "10.13.13.2/32"
-        else:
-            last_peer = self.config_parser.sections[-1]
-            for key, val in last_peer.items():
-                if key == "Peer":
-                    for k, v in val.items():
-                        if k == "AllowedIPs":
-                            allowed_ips = v[0].split("/", 1)[0].split(".")[-1]
-                            allowed_ips = f"10.13.13.{int(allowed_ips) + 1}/32"
-                            break
-
-        if not os.path.exists(f"/etc/wireguard/clients/peer{user_id}"):
-            os.mkdir(f"/etc/wireguard/clients/peer{user_id}")
-        subprocess.run(
-            f"wg genkey | tee /etc/wireguard/clients/peer{user_id}/privatekey | wg pubkey | tee /etc/wireguard/clients/peer{user_id}/publickey; wg genpsk | tee /etc/wireguard/clients/peer{user_id}/sharedkey",
-            shell=True,
-        )
-        client_private_key = subprocess.run(
-            f"cat /etc/wireguard/clients/peer{user_id}/privatekey",
-            shell=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        client_public_key = subprocess.run(
-            f"cat /etc/wireguard/clients/peer{user_id}/publickey",
-            shell=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        client_shared_key = subprocess.run(
-            f"cat /etc/wireguard/clients/peer{user_id}/sharedkey",
-            shell=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-
-        self.create_client_config(user_id, client_private_key, allowed_ips, client_shared_key)
-
-        if not comments or not isinstance(comments, list) or f"Id: {user_id}" not in comments:
-            comments = [f"Id: {user_id}"]
-
-        self.config_parser.sections.append(
-            {
-                "Peer": {
-                    "Comments": comments,
-                    "PublicKey": [client_public_key],
-                    "AllowedIPs": [allowed_ips],
-                    "PresharedKey": [client_shared_key],
-                }
+            config = {
+                "server": {
+                    "private_key": private_key,
+                    "public_key": public_key,
+                    "address": address,
+                },
+                "clients": {},
             }
+
+        self.__save_config(config)
+        sh_exec("wg-quick down wg0")
+        sh_exec("wg-quick up wg0")
+        self.__sync_config()
+
+        return config
+
+    def save_config(self, config: dict):
+        self.__save_config(config)
+        self.__sync_config()
+
+    def __save_config(self, config: dict) -> None:
+        result = (
+            "# Note: Do not edit this file manually!\n"
+            "# Your changes will be overwritten!\n\n"
+            "# Server\n"
+            "[Interface]\n"
+            f"PrivateKey = {config['server']['private_key']}\n"
+            f"Address = {config['server']['address']}\n"
+            f"ListenPort = 51820\n"
+            f"PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE\n"
+            f"PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth+ -j MASQUERADE\n\n"
         )
-        self.config_parser.write()
-        self.restart_service()
 
-    def remove_peer(self, peer_id: int):
-        if not self.get_peer(peer_id):
-            raise ValueError(f"Peer with {peer_id=} does not exist")
+        for client_id, client in config["clients"].items():
+            if not client["enabled"]:
+                continue
 
-        while self.get_peer(peer_id):
-            for section in self.config_parser.sections:
-                for key, val in section.items():
-                    if key == "Peer":
-                        for k, v in val.items():
-                            if k == "Comments":
-                                for comment in v:
-                                    if comment == f"Id: {peer_id}":
-                                        self.config_parser.sections.remove(section)
-                                        break
-        if os.path.exists(f"/etc/wireguard/clients/peer{peer_id}"):
-            shutil.rmtree(f"/etc/wireguard/clients/peer{peer_id}", onerror=remove_readonly)
-        self.config_parser.write()
-        self.restart_service()
+            result += (
+                f"# Client: {client['name']} ({client_id})\n"
+                "[Peer]\n"
+                f"PublicKey = {client['public_key']}\n"
+                f"PresharedKey = {client['preshared_key']}\n"
+                f"AllowedIPs = {client['address']}/32\n\n"
+            )
 
-    def get_peer_config(self, peer_id: int) -> BytesIO:
-        with open(f"/etc/wireguard/clients/peer{peer_id}/vpn.conf", "rb") as file:
-            return BytesIO(file.read())
+        with open(f"{self.wg_path}/wg0.json", "w") as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        with open(f"{self.wg_path}/wg0.conf", "w") as f:
+            f.write(result)
 
-    def get_peer_qr(self, peer_id: int) -> BytesIO:
-        with open(f"/etc/wireguard/clients/peer{peer_id}/qrcode.jpg", "rb") as file:
-            return BytesIO(file.read())
+    def __sync_config(self) -> None:
+        sh_exec("wg syncconf wg0 <(wg-quick strip wg0)")
 
-    def get_peer(self, peer_id: int) -> typing.Union[dict, None]:
-        for section in self.config_parser.sections:
-            for key, val in section.items():
-                if key == "Peer":
-                    for k, v in val.items():
-                        if k == "Comments":
-                            for comment in v:
-                                if comment == f"Id: {peer_id}":
-                                    return section
+    def get_clients(self) -> dict:
+        config = self.get_config()
+        clients = [
+            {
+                "id": client_id,
+                "name": client.get("name"),
+                "enabled": client.get("enabled"),
+                "address": client.get("address"),
+                "public_key": client.get("public_key"),
+                "created_at": datetime.datetime.fromtimestamp(client.get("created_at")),
+                "updated_at": datetime.datetime.fromtimestamp(client.get("updated_at")),
+                "allowed_ips": client.get("allowed_ips"),
+                "persistent_keepalive": None,
+                "latest_handshake_at": None,
+                "transfer_rx": None,
+                "transfer_tx": None,
+            }
+            for client_id, client in config["clients"].items()
+        ]
 
-    def install(self) -> None:
-        subprocess.run(
-            "apt update",
-            shell=True,
+        dump = sh_exec("wg show wg0 dump")
+        for line in dump.splitlines()[1:]:
+            (
+                public_key,
+                preshared_key,
+                endpoint,
+                allowed_ips,
+                latest_handshake_at,
+                transfer_rx,
+                transfer_tx,
+                persistent_keepalive,
+            ) = line.split("\t")
+
+            client = next(
+                (client for client in clients if client.get("public_key") == public_key), None
+            )
+            if not client:
+                return
+
+            client["latest_handshake_at"] = (
+                None
+                if latest_handshake_at == "0"
+                else datetime.datetime.fromtimestamp(int(latest_handshake_at))
+            )
+            client["transfer_rx"] = int(transfer_rx)
+            client["transfer_tx"] = int(transfer_tx)
+            client["persistent_keepalive"] = persistent_keepalive
+
+        return clients
+
+    def get_client(self, client_id: str) -> dict:
+        config = self.get_config()
+        client = config["clients"].get(client_id)
+        if not client:
+            return
+
+        return client
+
+    def get_client_configuration(self, client_id) -> str:
+        config = self.get_config()
+        client = config["clients"].get(client_id)
+        if not client:
+            return
+
+        wg_host = sh_exec("hostname -I | awk '{print $1}'")
+        return (
+            "[Interface]\n"
+            f"PrivateKey = {client['private_key']}\n"
+            f"Address = {client['address']}/32\n"
+            "DNS = 1.1.1.1, 1.0.0.1\n\n"
+            "[Peer]\n"
+            f"PublicKey = {config['server']['public_key']}\n"
+            f"PresharedKey = {client['preshared_key']}\n"
+            f"AllowedIPs = 0.0.0.0/0, ::/0\n"
+            "PersistentKeepalive = 0\n"
+            f"Endpoint = {wg_host}:51820\n"
         )
+
+    def create_client(self, name: str, client_id: str) -> typing.Union[int, dict]:
+        if not name:
+            return ClientErrorType.NAME_REQUIRED  # Name is required
+
+        if not client_id:
+            return ClientErrorType.CLIENT_ID_REQUIRED  # Client ID is required
+
+        if self.get_client(client_id):
+            return ClientErrorType.CLIENT_ALREADY_EXIST  # Client already exists
+
+        config = self.get_config()
+
+        private_key = sh_exec("wg genkey")
+        public_key = sh_exec(f"echo {private_key} | wg pubkey")
+        preshared_key = sh_exec("wg genpsk")
+
+        # Calculate next available IP address
+        address = None
+        for i in range(2, 255):
+            client = next(
+                (
+                    client
+                    for client in config["clients"].values()
+                    if client["address"] == self.default_address.replace("x", str(i))
+                ),
+                None,
+            )
+
+            if not client:
+                address = self.default_address.replace("x", str(i))
+                break
+
+        if not address:
+            return ClientErrorType.ADDRESS_LIMIT_REACHED  # No available IP address
+
+        client = {
+            "name": name,
+            "address": address,
+            "private_key": private_key,
+            "public_key": public_key,
+            "preshared_key": preshared_key,
+            "allowed_ips": "0.0.0.0/0, ::/0",
+            "created_at": int(datetime.datetime.now().timestamp()),
+            "updated_at": int(datetime.datetime.now().timestamp()),
+            "enabled": True,
+        }
+
+        config["clients"][client_id] = client
+
+        self.save_config(config)
+
+        return client
+
+    def delete_client(self, client_id: str) -> None:
+        config = self.get_config()
+
+        if client_id not in config["clients"]:
+            return  # Client does not exist
+
+        del config["clients"][client_id]
+        self.save_config(config)
+
+    def enable_client(self, client_id: str) -> None:
+        config = self.get_config()
+        client = self.get_client(client_id)
+
+        client["enabled"] = True
+        client["updated_at"] = int(datetime.datetime.now().timestamp())
+
+        config["clients"][client_id] = client
+        self.save_config(config)
+
+    def disable_client(self, client_id: str) -> None:
+        config = self.get_config()
+        client = self.get_client(client_id)
+
+        client["enabled"] = False
+        client["updated_at"] = int(datetime.datetime.now().timestamp())
+
+        config["clients"][client_id] = client
+        self.save_config(config)
+
+    def update_client_name(self, client_id: str, name: str) -> None:
+        config = self.get_config()
+        client = self.get_client(client_id)
+
+        client["name"] = name
+        client["updated_at"] = int(datetime.datetime.now().timestamp())
+
+        config["clients"][client_id] = client
+        self.save_config(config)
+
+
+@Client.on_message(command(["wgi"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+async def wg_install(_: Client, message: Message):
+    if os.geteuid() != 0:
+        await message.edit("<b>This command must be run as root!</b>")
+        return
+
+    prefix = get_prefix()
+
+    if (
+        len(message.command) > 1
+        and message.command[1] in ["-y", "--yes"]
+        or not shutil.which("wg")
+    ):
+        await message.edit_text("<b>Updating packages...</b>")
+        sh_exec("apt update")
         if not shutil.which("wg"):
-            subprocess.run(
-                "apt install wireguard -y",
-                shell=True,
-            )
-        if not shutil.which("qrencode"):
-            subprocess.run(
-                "apt install qrencode -y",
-                shell=True,
-            )
+            await message.edit_text("<b>Installing WireGuard...</b>")
+            sh_exec("apt install wireguard -y")
 
         if not os.path.exists("/etc/wireguard"):
             os.mkdir("/etc/wireguard")
-        if os.path.exists("/etc/wireguard/clients"):
-            shutil.rmtree("/etc/wireguard/clients", onerror=remove_readonly)
-        os.mkdir("/etc/wireguard/clients")
-
-        subprocess.run(
-            "wg genkey | tee /etc/wireguard/privatekey | "
-            "wg pubkey | tee /etc/wireguard/publickey",
-            shell=True,
-        )
-        os.chmod("/etc/wireguard/privatekey", 0o600)
-
-        self.server_private_key = subprocess.run(
-            "cat /etc/wireguard/privatekey",
-            shell=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        self.server_public_key = subprocess.run(
-            "cat /etc/wireguard/publickey",
-            shell=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-
-        with open("/etc/wireguard/wg0.conf", "w") as f:
-            f.write(
-                "[Interface]\n"
-                "Address = 10.13.13.1\n"
-                "ListenPort = 51820\n"
-                f"PrivateKey = {self.server_private_key}\n"
-                "PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE\n"
-                "PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth+ -j MASQUERADE\n"
-            )
 
         with open("/etc/sysctl.conf", "r") as f:
             lines = f.readlines()
@@ -299,56 +344,19 @@ class WireGuard:
                 else:
                     f.write(line)
 
-        subprocess.run(
-            "systemctl enable wg-quick@wg0.service",
-            shell=True,
-        )
-        subprocess.run(
-            "systemctl start wg-quick@wg0.service",
-            shell=True,
-        )
+        sh_exec("systemctl enable wg-quick@wg0.service")
+        sh_exec("systemctl start wg-quick@wg0.service")
 
-    def uninstall(self) -> None:
-        subprocess.run(
-            "systemctl stop wg-quick@wg0.service; systemctl disable wg-quick@wg0.service",
-            shell=True,
-        )
-        subprocess.run(
-            "rm -rf /etc/wireguard",
-            shell=True,
-        )
-        subprocess.run(
-            "apt remove wireguard -y",
-            shell=True,
-        )
-
-
-@Client.on_message(~filters.scheduled & command(["wgi"]) & filters.me)
-async def wg_install(_: Client, message: Message):
-    if os.geteuid() != 0:
-        await message.edit("<b>This command must be run as root!</b>")
-        return
-    wg = WireGuard()
-
-    prefix = get_prefix()
-
-    if (
-        len(message.command) > 1
-        and message.command[1] in ["-y", "--yes"]
-        or not shutil.which("wg")
-    ):
-        await message.edit_text("<b>Installing WireGuard...</b>")
-        wg.install()
         await message.edit_text("<b>✨ WireGuard installed!</b>")
     else:
         await message.edit_text(
             "<b>Are you sure you want to install WireGuard?</b>\n"
-            "<b>It will delete all your current VPN configurations!</b>\n"
+            "<b>This will delete all your current VPN configurations!</b>\n"
             f"<b>Use</b> <code>{prefix}{message.command[0]} -y</code> <b>to confirm</b>"
         )
 
 
-@Client.on_message(~filters.scheduled & command(["wgu"]) & filters.me)
+@Client.on_message(command(["wgu"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
 async def wg_uninstall(_: Client, message: Message):
     if os.geteuid() != 0:
         await message.edit("<b>This command must be run as root!</b>")
@@ -363,197 +371,185 @@ async def wg_uninstall(_: Client, message: Message):
         )
         return
 
-    wg = WireGuard()
-
     if len(message.command) > 1 and message.command[1] in ["-y", "--yes"]:
         await message.edit_text("Uninstalling WireGuard...")
-        wg.uninstall()
+        sh_exec("systemctl stop wg-quick@wg0.service; systemctl disable wg-quick@wg0.service")
+        sh_exec("rm -rf /etc/wireguard")
+        sh_exec("apt remove wireguard -y")
         await message.edit_text("✨ WireGuard successfully uninstalled")
     else:
         await message.edit_text(
             "<b>Are you sure you want to uninstall WireGuard?</b>\n"
-            "<b>It will delete all your current VPN configurations!</b>\n"
+            "<b>This will delete all your current VPN configurations!</b>\n"
             f"<b>Use</b> <code>{prefix}wgu -y</code> <b>to confirm</b>"
         )
 
 
-@Client.on_message(~filters.scheduled & command(["wga"]) & filters.me)
+@Client.on_message(command(["wga"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@check_wireguard_installed
 async def wg_add(client: Client, message: Message):
-    if os.geteuid() != 0:
-        await message.edit("<b>This command must be run as root!</b>")
-        return
-
-    prefix = get_prefix()
-
-    if not shutil.which("wg"):
-        await message.edit_text(
-            "<b>WireGuard is not installed!</b>\n"
-            f"<b>Use</b> <code>{prefix}wgi</code> <b>to install</b>"
-        )
-        return
-
+    args = get_args_raw(message)
     wg = WireGuard()
 
-    user_id = message.chat.id
-    if message.reply_to_message:
-        user_id = message.reply_to_message.from_user.id
-    elif len(message.command) > 1:
-        if (
-            message.command[1].startswith("-")
-            and message.command[1][1:].isdigit()
-            or message.command[1].isdigit()
-        ):
-            user_id = int(message.command[1])
+    if len(args.split()) == 2 and args.split()[0].lstrip("-").isdigit():
+        user_id = args.split()[0].lstrip("-")
+        name = args.split(maxsplit=1)[1]
+    else:
+        user_id = message.chat.id
+        name = get_full_name(message.chat)
 
-    if wg.get_peer(user_id):
-        await message.edit_text("<b>User already exists</b>")
-        return
+    wg_client = wg.create_client(name, str(user_id))
+    if wg_client == ClientErrorType.CLIENT_ALREADY_EXIST:  # Client already exists
+        return await message.edit_text("<b>Client already exists</b>")
+    elif wg_client == ClientErrorType.ADDRESS_LIMIT_REACHED:  # Client limit reached
+        return await message.edit_text("<b>Client limit reached</b>")
 
-    try:
-        peer = await client.get_users(user_id)
-    except PeerIdInvalid:
-        peer = User(
-            id=user_id,
-            first_name="None",
-            username="None",
-        )
+    client_config = wg.get_client_configuration(str(user_id))
+    client_config_binary = BytesIO(client_config.encode("utf-8"))
 
-    note = message.text.split(" ", 2)[2] if len(message.command) > 2 else "None"
-
-    wg.add_peer(
-        user_id=user_id,
-        comments=[
-            f"Id: {user_id}",
-            f"Name: {full_name(peer)}",
-            f"Username: {peer.username}",
-            f"Reg_date: {datetime.datetime.now().timestamp()}",
-            f"Note: {note}",
-        ],
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=64,
+        border=4,
     )
-    await client.send_document(message.chat.id, wg.get_peer_config(user_id), file_name="vpn.conf")
+    qr.add_data(client_config)
+    qr.make(fit=True)
+
+    client_qr_binary = BytesIO()
+
+    qr.make_image(fill_color="black", back_color="white").save(client_qr_binary)
+
+    await client.send_document(message.chat.id, client_config_binary, file_name="vpn.conf")
     await client.send_photo(
         message.chat.id,
-        wg.get_peer_qr(user_id),
+        client_qr_binary,
         caption=text_template,
     )
 
 
-@Client.on_message(~filters.scheduled & command(["wgr"]) & filters.me)
+@Client.on_message(command(["wgr"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@check_wireguard_installed
 async def wg_remove(_: Client, message: Message):
-    if os.geteuid() != 0:
-        await message.edit("<b>This command must be run as root!</b>")
-        return
-
-    prefix = get_prefix()
-
-    if not shutil.which("wg"):
-        await message.edit_text(
-            "<b>WireGuard is not installed!</b>\n"
-            f"<b>Use</b> <code>{prefix}wgi</code> <b>to install</b>"
-        )
-        return
-
     wg = WireGuard()
 
-    user_id = message.chat.id
-    if message.reply_to_message:
-        user_id = message.reply_to_message.from_user.id
-    elif len(message.command) > 1:
-        if (
-            message.command[1].startswith("-")
-            and message.command[1][1:].isdigit()
-            or message.command[1].isdigit()
-        ):
-            user_id = int(message.command[1])
+    args = get_args_raw(message)
+    if args and args.split()[0].lstrip("-").isdigit():
+        user_id = args.split()[0].lstrip("-")
+    else:
+        user_id = message.chat.id
 
-    if not wg.get_peer(user_id):
-        await message.edit_text("<b>User does not exist</b>")
-        return
-    wg.remove_peer(user_id)
+    if not wg.get_client(str(user_id)):
+        return await message.edit_text("<b>User does not exist</b>")
+
+    wg.delete_client(user_id)
     await message.edit_text(f"<b>User ID: {user_id} removed from WireGuard</b>")
 
 
-@Client.on_message(~filters.scheduled & command(["wgs"]) & filters.me)
+@Client.on_message(command(["wgs"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@check_wireguard_installed
 async def wg_show(client: Client, message: Message):
-    if os.geteuid() != 0:
-        await message.edit("<b>This command must be run as root!</b>")
-        return
-
-    prefix = get_prefix()
-
-    if not shutil.which("wg"):
-        await message.edit_text(
-            "<b>WireGuard is not installed!</b>\n"
-            f"<b>Use</b> <code>{prefix}wgi</code> <b>to install</b>"
-        )
-        return
-
     wg = WireGuard()
 
-    user_id = message.chat.id
-    if message.reply_to_message:
-        user_id = message.reply_to_message.from_user.id
-    elif len(message.command) > 1:
-        if (
-            message.command[1].startswith("-")
-            and message.command[1][1:].isdigit()
-            or message.command[1].isdigit()
-        ):
-            user_id = int(message.command[1])
+    user_id = get_user_id(message)
 
-    if not wg.get_peer(user_id):
-        await message.edit_text("<b>User does not exist</b>")
-        return
+    if not wg.get_client(str(user_id)):
+        return await message.edit_text("<b>User does not exist</b>")
 
-    await client.send_document(message.chat.id, wg.get_peer_config(user_id), file_name="vpn.conf")
+    client_config = wg.get_client_configuration(str(user_id))
+    client_config_binary = BytesIO(client_config.encode("utf-8"))
+
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=64,
+        border=4,
+    )
+    qr.add_data(client_config)
+    qr.make(fit=True)
+
+    client_qr_binary = BytesIO()
+
+    qr.make_image(fill_color="black", back_color="white").save(client_qr_binary)
+
+    await client.send_document(message.chat.id, client_config_binary, file_name="vpn.conf")
     await client.send_photo(
         message.chat.id,
-        wg.get_peer_qr(user_id),
+        client_qr_binary,
         caption=text_template,
     )
 
 
-@Client.on_message(~filters.scheduled & command(["wgl"]) & filters.me)
-async def wg_list(_: Client, message: Message):
-    if os.geteuid() != 0:
-        await message.edit("<b>This command must be run as root!</b>")
-        return
-
-    prefix = get_prefix()
-
-    if not shutil.which("wg"):
-        await message.edit_text(
-            "<b>WireGuard is not installed!</b>\n"
-            f"<b>Use</b> <code>{prefix}wgi</code> <b>to install</b>"
-        )
-        return
-
+@Client.on_message(command(["wge"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@check_wireguard_installed
+async def wg_enable(_: Client, message: Message):
     wg = WireGuard()
 
-    peers = wg.get_all_peers()
-    if not peers:
+    args = get_args_raw(message)
+
+    if not args:
+        return await message.edit_text("<b>Invalid arguments</b>")
+
+    if message.reply_to_message:
+        if len(args.split()) != 1:
+            return await message.edit_text("<b>Invalid arguments</b>")
+        if args.split()[0] in ("true", "1", "on"):
+            wg.enable_client(str(message.reply_to_message.from_user.id))
+            return await message.edit_text(
+                f"<b>WireGuard: Enabled for {message.reply_to_message.from_user.id}</b>"
+            )
+        elif args.split()[0] in ("false", "0", "off"):
+            wg.disable_client(str(message.reply_to_message.from_user.id))
+            return await message.edit_text(
+                f"<b>WireGuard: Disabled for {message.reply_to_message.from_user.id}</b>"
+            )
+        else:
+            return await message.edit_text("<b>Invalid arguments</b>")
+    elif len(args.split()) == 1:
+        if args.split()[0] in ("true", "1", "on"):
+            wg.enable_client(str(message.chat.id))
+            return await message.edit_text(f"<b>WireGuard: Enabled for {message.chat.id}</b>")
+        elif args.split()[0] in ("false", "0", "off"):
+            wg.disable_client(str(message.chat.id))
+            return await message.edit_text(f"<b>WireGuard: Disabled for {message.chat.id}</b>")
+        else:
+            return await message.edit_text("<b>Invalid arguments</b>")
+    elif len(args.split()) == 2:
+        if args.split()[1] in ("true", "1", "on") and args.split()[0].lstrip("-").isdigit():
+            wg.enable_client(args.split()[0])
+            return await message.edit_text(f"<b>WireGuard: Enabled for {args.split()[0]}</b>")
+        elif args.split()[1] in ("false", "0", "off") and args.split()[0].lstrip("-").isdigit():
+            wg.disable_client(args.split()[0])
+            return await message.edit_text(f"<b>WireGuard: Disabled for {args.split()[0]}</b>")
+        else:
+            return await message.edit_text("<b>Invalid arguments</b>")
+
+
+@Client.on_message(command(["wgl"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@check_wireguard_installed
+async def wg_list(_: Client, message: Message):
+    wg = WireGuard()
+
+    clients = wg.get_clients()
+    if not clients:
         await message.edit_text("<b>No users found</b>")
         return
-    text = "<b>===== Users =====</b>\n"
-    for peer in peers:
-        for comment in peer["Peer"]["Comments"]:
-            key, value = comment.split(": ", 1)
-            if key == "Reg_date" and value != "None":
-                value = datetime.datetime.fromtimestamp(float(value)).strftime("%Y-%m-%d %H:%M:%S")
-                text += f"<b>{key}:</b> <code>{value}</code>\n" if value != "None" else ""
-            elif key == "Username" and value != "None":
-                text += f"<b>{key}:</b> <spoiler>@{value}</spoiler>\n" if value != "None" else ""
-            else:
-                text += f"<b>{key}:</b> <code>{value}</code>\n" if value != "None" else ""
-        text += "\n"
+    text = "🗓️ <b>Список всех пользователей:</b>\n\n"
+    for count, client in enumerate(clients, start=1):
+        text += (
+            f"{count}. {'🟢' if client['enabled'] else '🔴'} "
+            f"<code>{client['id']}</code> - <i>{client['created_at']}</i>\n"
+        )
+
     await message.edit_text(text)
 
 
 modules_help["wireguard"] = {
-    "wgi": "Install WireGuard",
-    "wgu": "Uninstall WireGuard",
     "wga [user_id|reply]": "Add user to WireGuard and send config",
+    "wge [user_id|reply] [on|off]": "Enable/Disable WireGuard for user",
+    "wgi": "Install WireGuard",
+    "wgl": "Show all users in WireGuard",
     "wgr [user_id|reply]": "Remove user from WireGuard",
     "wgs [user_id|reply]": "Show WireGuard config",
-    "wgl": "Show all users in WireGuard",
+    "wgu": "Uninstall WireGuard",
 }
