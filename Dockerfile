@@ -16,6 +16,9 @@ COPY . /app/Userbot
 RUN pip3 install --upgrade pip setuptools
 RUN pip3 install --no-warn-script-location --no-cache-dir -U -r requirements.txt
 
+RUN rm /etc/localtime
+RUN ln -s /usr/share/zoneinfo/Europe/Moscow /etc/localtime
+
 EXPOSE 8080
 
 CMD ["python3", "main.py"]
