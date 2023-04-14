@@ -9,7 +9,8 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from pyrogram import Client, errors
-from pyrogram.types import Message, User
+from pyrogram.enums import ChatType
+from pyrogram.types import Chat, Message, User
 
 from utils.db import db
 from utils.misc import modules_help, script_path
@@ -44,8 +45,15 @@ def restart():
     os.execvp(sys.executable, [sys.executable, "main.py"])
 
 
-def full_name(user: User) -> str:
-    return f"{user.first_name} {user.last_name}" if user.last_name else user.first_name
+def get_full_name(obj: typing.Union[User, Chat]) -> str:
+    if isinstance(obj, Chat):
+        if obj.type == ChatType.PRIVATE:
+            return f"{obj.first_name} {obj.last_name}" if obj.last_name else obj.first_name
+        return obj.title
+    elif isinstance(obj, User):
+        return f"{obj.first_name} {obj.last_name}" if obj.last_name else obj.first_name
+    else:
+        raise TypeError("obj must be User or Chat")
 
 
 def format_exc(e: Exception, suffix="") -> str:
