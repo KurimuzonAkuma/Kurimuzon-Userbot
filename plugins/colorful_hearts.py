@@ -8,7 +8,7 @@ from utils.filters import command
 from utils.misc import modules_help
 
 
-@Client.on_message(~filters.scheduled & command(["ah"]) & filters.me)
+@Client.on_message(~filters.scheduled & command(["ah"]) & filters.me & ~filters.forwarded)
 async def colorful_hearts(client: Client, message: Message):
     command = message.text.split(maxsplit=1)
     cycles = command[-1]

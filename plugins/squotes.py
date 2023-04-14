@@ -33,7 +33,7 @@ def resize_image(input_img, output=None, img_type="PNG", size: int = 512, size2:
     return output
 
 
-@Client.on_message(command(["q", "quote"]) & filters.me)
+@Client.on_message(command(["q", "quote"]) & filters.me & ~filters.forwarded)
 @with_reply
 async def quote_cmd(client: Client, message: types.Message):
     if len(message.command) > 1 and message.command[1].isdigit():
@@ -100,7 +100,7 @@ async def quote_cmd(client: Client, message: types.Message):
         await message.delete()
 
 
-@Client.on_message(command(["fq", "fakequote"]) & filters.me)
+@Client.on_message(command(["fq", "fakequote"]) & filters.me & ~filters.forwarded)
 @with_reply
 async def fake_quote_cmd(client: Client, message: types.Message):
     is_png = "!png" in message.command or "!file" in message.command

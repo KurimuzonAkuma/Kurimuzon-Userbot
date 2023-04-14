@@ -73,7 +73,9 @@ async def interpreter_task(client: Client, message: Message):
         )
 
 
-@Client.on_message(~filters.scheduled & command(["py", "pyne", "rpy", "rpyne"]) & filters.me)
+@Client.on_message(
+    ~filters.scheduled & command(["py", "pyne", "rpy", "rpyne"]) & filters.me & ~filters.forwarded
+)
 async def user_exec(client: Client, message: Message):
     client.loop.create_task(interpreter_task(client, message))
 
