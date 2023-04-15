@@ -1,11 +1,12 @@
+import asyncio
 import datetime
 import json
 import os
 import shutil
-import subprocess
 import typing
 from enum import Enum
 from io import BytesIO
+from subprocess import PIPE, Popen
 
 import qrcode
 from pyrogram import Client, filters
@@ -46,12 +47,16 @@ def check_wireguard_installed(func):
 
 
 def sh_exec(cmd: str) -> str:
-    return subprocess.run(
+    cmd_obj = Popen(
         cmd,
         shell=True,
-        capture_output=True,
+        stdout=PIPE,
+        stderr=PIPE,
         text=True,
-    ).stdout.strip()
+        executable="/bin/bash",
+    )
+    stdout, stderr = cmd_obj.communicate()
+    return stdout.strip() or stderr.strip()
 
 
 def get_user_id(message: Message) -> int:
@@ -83,27 +88,30 @@ class WireGuard:
         try:
             with open(f"{self.wg_path}/wg0.json", "r") as f:
                 config = json.load(f)
-        # generate new config if file not found
         except FileNotFoundError:
-            private_key = sh_exec("wg genkey")
-            public_key = sh_exec(f"echo {private_key} | wg pubkey")
-            address = self.default_address.replace("x", "1")
+            config = self.__generate_config()
+        return config
 
-            config = {
-                "server": {
-                    "private_key": private_key,
-                    "public_key": public_key,
-                    "address": address,
-                },
-                "clients": {},
-            }
+    def __generate_config(self):
+        private_key = sh_exec("wg genkey")
+        public_key = sh_exec(f"echo {private_key} | wg pubkey")
+        address = self.default_address.replace("x", "1")
 
-        self.__save_config(config)
+        result = {
+            "server": {
+                "private_key": private_key,
+                "public_key": public_key,
+                "address": address,
+            },
+            "clients": {},
+        }
+
+        self.__save_config(result)
         sh_exec("wg-quick down wg0")
         sh_exec("wg-quick up wg0")
         self.__sync_config()
 
-        return config
+        return result
 
     def save_config(self, config: dict):
         self.__save_config(config)
@@ -116,7 +124,7 @@ class WireGuard:
             "# Server\n"
             "[Interface]\n"
             f"PrivateKey = {config['server']['private_key']}\n"
-            f"Address = {config['server']['address']}\n"
+            f"Address = {config['server']['address']}/24\n"
             f"ListenPort = 51820\n"
             f"PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE\n"
             f"PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth+ -j MASQUERADE\n\n"
@@ -435,14 +443,14 @@ async def wg_remove(_: Client, message: Message):
 
     args = get_args_raw(message)
     if args and args.split()[0].lstrip("-").isdigit():
-        user_id = args.split()[0].lstrip("-")
+        user_id = args.split()[0]
     else:
         user_id = message.chat.id
 
     if not wg.get_client(str(user_id)):
         return await message.edit_text("<b>User does not exist</b>")
 
-    wg.delete_client(user_id)
+    wg.delete_client(str(user_id))
     await message.edit_text(f"<b>User ID: {user_id} removed from WireGuard</b>")
 
 
@@ -530,16 +538,35 @@ async def wg_enable(_: Client, message: Message):
 async def wg_list(_: Client, message: Message):
     wg = WireGuard()
 
-    clients = wg.get_clients()
-    if not clients:
+    old_clients = wg.get_clients()
+    if not old_clients:
         await message.edit_text("<b>No users found</b>")
         return
+
+    start_time = datetime.datetime.now()
+    await asyncio.sleep(1)
+    new_clients = wg.get_clients()
+    time_elapsed = datetime.datetime.now() - start_time
+
     text = "🗓️ <b>Список всех пользователей:</b>\n\n"
-    for count, client in enumerate(clients, start=1):
-        text += (
-            f"{count}. {'🟢' if client['enabled'] else '🔴'} "
-            f"<code>{client['id']}</code> - <i>{client['created_at']}</i>\n"
-        )
+    for count, client in enumerate(new_clients, start=1):
+        last_rx = old_clients[count - 1]["transfer_rx"]
+        last_tx = old_clients[count - 1]["transfer_tx"]
+        current_rx = client["transfer_rx"]
+        current_tx = client["transfer_tx"]
+        if client["latest_handshake_at"]:
+            rx_speed = (current_rx - last_rx) / time_elapsed.total_seconds()
+            tx_speed = (current_tx - last_tx) / time_elapsed.total_seconds()
+
+        text += f"{count}. {'🟢' if client['enabled'] else '🔴'} <code>{client['id']}</code>"
+        if client["latest_handshake_at"] and (
+            datetime.datetime.now() - client["latest_handshake_at"]
+        ) < datetime.timedelta(minutes=5):
+            text += f" - ⬆️{tx_speed/1_000_000:.2f}Mbps ⬇️{rx_speed/1_000_000:.2f}Mbps\n"
+        elif client["latest_handshake_at"]:
+            text += f" - 🤝 {client['latest_handshake_at']}\n"
+        else:
+            text += "\n"
 
     await message.edit_text(text)
 
