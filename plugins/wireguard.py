@@ -189,14 +189,15 @@ class WireGuard:
             if not client:
                 return
 
+            client["endpoint"] = endpoint
             client["latest_handshake_at"] = (
                 None
                 if latest_handshake_at == "0"
                 else datetime.datetime.fromtimestamp(int(latest_handshake_at))
             )
+            client["persistent_keepalive"] = persistent_keepalive
             client["transfer_rx"] = int(transfer_rx)
             client["transfer_tx"] = int(transfer_tx)
-            client["persistent_keepalive"] = persistent_keepalive
 
         return clients
 
@@ -537,6 +538,7 @@ async def wg_enable(_: Client, message: Message):
 @check_wireguard_installed
 async def wg_list(_: Client, message: Message):
     wg = WireGuard()
+    args = get_args_raw(message)
 
     old_clients = wg.get_clients()
     if not old_clients:
@@ -548,25 +550,54 @@ async def wg_list(_: Client, message: Message):
     new_clients = wg.get_clients()
     time_elapsed = datetime.datetime.now() - start_time
 
-    text = "🗓️ <b>Список всех пользователей:</b>\n\n"
-    for count, client in enumerate(new_clients, start=1):
-        last_rx = old_clients[count - 1]["transfer_rx"]
-        last_tx = old_clients[count - 1]["transfer_tx"]
-        current_rx = client["transfer_rx"]
-        current_tx = client["transfer_tx"]
-        if client["latest_handshake_at"]:
+    old_user = next((client for client in old_clients if client.get("id") == args), None)
+    if args and args.lstrip("-").isdigit() and old_user:
+        new_user = next((client for client in new_clients if client.get("id") == args), None)
+
+        last_rx = old_user["transfer_rx"]
+        last_tx = old_user["transfer_tx"]
+        current_rx = new_user["transfer_rx"]
+        current_tx = new_user["transfer_tx"]
+        if new_user["latest_handshake_at"]:
             rx_speed = (current_rx - last_rx) / time_elapsed.total_seconds()
             tx_speed = (current_tx - last_tx) / time_elapsed.total_seconds()
 
-        text += f"{count}. {'🟢' if client['enabled'] else '🔴'} <code>{client['id']}</code>"
-        if client["latest_handshake_at"] and (
-            datetime.datetime.now() - client["latest_handshake_at"]
+        text = f"<b>Информация о пользователе {new_user['name']}</b> (<code>{new_user['id']}</code>)\n\n"
+        text += f"<b>Включен:</b> {'🟢' if new_user['enabled'] else '🔴'}\n"
+        text += f"<b>Адрес:</b> {new_user['address']}\n"
+        text += f"<b>Последний вход с:</b> {new_user['endpoint']}\n"
+        text += f"<b>Дата регистрации:</b> {new_user['created_at']}\n"
+        text += f"<b>Последнее изменение:</b> {new_user['updated_at']}\n"
+
+        if new_user["latest_handshake_at"] and (
+            datetime.datetime.now() - new_user["latest_handshake_at"]
         ) < datetime.timedelta(minutes=5):
-            text += f" - ⬆️{tx_speed/1_000_000:.2f}Mbps ⬇️{rx_speed/1_000_000:.2f}Mbps\n"
-        elif client["latest_handshake_at"]:
-            text += f" - 🤝 {client['latest_handshake_at']}\n"
+            text += f"<b>Скорость:</b> ⬇️{rx_speed/1_000_000:.2f}MB/s ⬆️{tx_speed/1_000_000:.2f}MB/s \n"
+        elif new_user["latest_handshake_at"]:
+            text += f"<b>Последнее рукопожатие:</b> {new_user['latest_handshake_at']}\n"
         else:
             text += "\n"
+
+    else:
+        text = "🗓️ <b>Список всех пользователей:</b>\n\n"
+        for count, client in enumerate(new_clients, start=1):
+            last_rx = old_clients[count - 1]["transfer_rx"]
+            last_tx = old_clients[count - 1]["transfer_tx"]
+            current_rx = client["transfer_rx"]
+            current_tx = client["transfer_tx"]
+            if client["latest_handshake_at"]:
+                rx_speed = (current_rx - last_rx) / time_elapsed.total_seconds()
+                tx_speed = (current_tx - last_tx) / time_elapsed.total_seconds()
+
+            text += f"{count}. {'🟢' if client['enabled'] else '🔴'} <code>{client['id']}</code>"
+            if client["latest_handshake_at"] and (
+                datetime.datetime.now() - client["latest_handshake_at"]
+            ) < datetime.timedelta(minutes=5):
+                text += f" - ⬇️{rx_speed/1_000_000:.2f}MB/s ⬆️{tx_speed/1_000_000:.2f}MB/s \n"
+            elif client["latest_handshake_at"]:
+                text += f" - 🤝 {client['latest_handshake_at']}\n"
+            else:
+                text += "\n"
 
     await message.edit_text(text)
 
