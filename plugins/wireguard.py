@@ -8,6 +8,7 @@ from enum import Enum
 from io import BytesIO
 from subprocess import PIPE, Popen
 
+import arrow
 import qrcode
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -17,10 +18,13 @@ from utils.misc import modules_help
 from utils.scripts import get_args_raw, get_full_name, get_prefix
 
 text_template = (
-    "<emoji id=5472164874886846699>✨</emoji> Твой конфиг для WireGuard:\n\n"
+    "<emoji id=5472164874886846699>✨</emoji> WireGuard конфиг пользователя {0}!\n\n"
     "<b><emoji id=5818865088970362886>❕</b></emoji><b> Инструкция по установке:\n"
     "</b>Android/IOS:\n"
-    '1. Скачать приложение из <a href="https://play.google.com/store/apps/details?id=com.wireguard.android">Play Market</a> или <a href="https://apps.apple.com/ru/app/wireguard/id1441195209">App Store</a>\n'
+    "1. Скачать приложение из "
+    '<a href="https://play.google.com/store/apps/details?id=com.wireguard.android">'
+    'Play Market</a> или <a href="https://apps.apple.com/ru/app/wireguard/id1441195209">'
+    "App Store</a>\n"
     "2. Нажать на плюсик и импортировать файл конфигурации или отсканировать QR код\n"
     "3. Включить VPN\n\n"
     "Windows/MacOS/Linux:\n"
@@ -46,6 +50,24 @@ def check_wireguard_installed(func):
     return wrapped
 
 
+def calculate_speed(rx_old, rx_new, tx_old, tx_new, time_elapsed):
+    rx_speed = (rx_new - rx_old) / time_elapsed
+    tx_speed = (tx_new - tx_old) / time_elapsed
+    return format_speed(rx_speed), format_speed(tx_speed)
+
+
+# Format the speed to human readable format
+def format_speed(speed):
+    if speed < 1024:
+        return f"{speed:.2f}B/s"
+    elif speed < 1024 * 1024:
+        return f"{speed / 1024:.2f}KB/s"
+    elif speed < 1024 * 1024 * 1024:
+        return f"{speed / 1024 / 1024:.2f}MB/s"
+    else:
+        return f"{speed / 1024 / 1024 / 1024:.2f}GB/s"
+
+
 def sh_exec(cmd: str) -> str:
     cmd_obj = Popen(
         cmd,
@@ -57,18 +79,6 @@ def sh_exec(cmd: str) -> str:
     )
     stdout, stderr = cmd_obj.communicate()
     return stdout.strip() or stderr.strip()
-
-
-def get_user_id(message: Message) -> int:
-    user_id = message.chat.id
-    args = get_args_raw(message)
-
-    if message.reply_to_message:
-        user_id = message.reply_to_message.from_user.id
-    if args and args.split(maxsplit=1)[0].lstrip("-").isdigit():
-        user_id = int(args)
-
-    return user_id
 
 
 class ClientErrorType(Enum):
@@ -125,9 +135,13 @@ class WireGuard:
             "[Interface]\n"
             f"PrivateKey = {config['server']['private_key']}\n"
             f"Address = {config['server']['address']}/24\n"
-            f"ListenPort = 51820\n"
-            f"PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE\n"
-            f"PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth+ -j MASQUERADE\n\n"
+            "ListenPort = 51820\n"
+            "PostUp = iptables -A FORWARD -i %i -j ACCEPT; "
+            "iptables -A FORWARD -o %i -j ACCEPT; "
+            "iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE\n"
+            "PostDown = iptables -D FORWARD -i %i -j ACCEPT; "
+            "iptables -D FORWARD -o %i -j ACCEPT; "
+            "iptables -t nat -D POSTROUTING -o eth+ -j MASQUERADE\n\n"
         )
 
         for client_id, client in config["clients"].items():
@@ -209,7 +223,13 @@ class WireGuard:
 
         return client
 
-    def get_client_configuration(self, client_id) -> str:
+    def get_full_client(self, client_id: str) -> dict:
+        clients = self.get_clients()
+        if not clients:
+            return
+        return next((client for client in clients if client.get("id") == client_id), None)
+
+    def get_client_configuration(self, client_id: str) -> str:
         config = self.get_config()
         client = config["clients"].get(client_id)
         if not client:
@@ -292,32 +312,19 @@ class WireGuard:
         self.save_config(config)
 
     def enable_client(self, client_id: str) -> None:
-        config = self.get_config()
-        client = self.get_client(client_id)
-
-        client["enabled"] = True
-        client["updated_at"] = int(datetime.datetime.now().timestamp())
-
-        config["clients"][client_id] = client
-        self.save_config(config)
+        self.__update_client(client_id, "enabled", True)
 
     def disable_client(self, client_id: str) -> None:
-        config = self.get_config()
-        client = self.get_client(client_id)
-
-        client["enabled"] = False
-        client["updated_at"] = int(datetime.datetime.now().timestamp())
-
-        config["clients"][client_id] = client
-        self.save_config(config)
+        self.__update_client(client_id, "enabled", False)
 
     def update_client_name(self, client_id: str, name: str) -> None:
+        self.__update_client(client_id, "name", name)
+
+    def __update_client(self, client_id, arg1, arg2):
         config = self.get_config()
         client = self.get_client(client_id)
-
-        client["name"] = name
+        client[arg1] = arg2
         client["updated_at"] = int(datetime.datetime.now().timestamp())
-
         config["clients"][client_id] = client
         self.save_config(config)
 
@@ -365,21 +372,9 @@ async def wg_install(_: Client, message: Message):
         )
 
 
-@Client.on_message(command(["wgu"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@Client.on_message(command(["wgr"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@check_wireguard_installed
 async def wg_uninstall(_: Client, message: Message):
-    if os.geteuid() != 0:
-        await message.edit("<b>This command must be run as root!</b>")
-        return
-
-    prefix = get_prefix()
-
-    if not shutil.which("wg"):
-        await message.edit_text(
-            "<b>WireGuard is not installed!</b>\n"
-            f"<b>Use</b> <code>{prefix}wgi</code> <b>to install</b>"
-        )
-        return
-
     if len(message.command) > 1 and message.command[1] in ["-y", "--yes"]:
         await message.edit_text("Uninstalling WireGuard...")
         sh_exec("systemctl stop wg-quick@wg0.service; systemctl disable wg-quick@wg0.service")
@@ -390,11 +385,11 @@ async def wg_uninstall(_: Client, message: Message):
         await message.edit_text(
             "<b>Are you sure you want to uninstall WireGuard?</b>\n"
             "<b>This will delete all your current VPN configurations!</b>\n"
-            f"<b>Use</b> <code>{prefix}wgu -y</code> <b>to confirm</b>"
+            f"<b>Use</b> <code>{get_prefix()}{message.command[0]} -y</code> <b>to confirm</b>"
         )
 
 
-@Client.on_message(command(["wga"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@Client.on_message(command(["wgau"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
 @check_wireguard_installed
 async def wg_add(client: Client, message: Message):
     args = get_args_raw(message)
@@ -429,15 +424,15 @@ async def wg_add(client: Client, message: Message):
 
     qr.make_image(fill_color="black", back_color="white").save(client_qr_binary)
 
-    await client.send_document(message.chat.id, client_config_binary, file_name="vpn.conf")
     await client.send_photo(
         message.chat.id,
         client_qr_binary,
-        caption=text_template,
+        caption=text_template.format(wg_client["name"]),
     )
+    await client.send_document(message.chat.id, client_config_binary, file_name="vpn.conf")
 
 
-@Client.on_message(command(["wgr"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@Client.on_message(command(["wgru"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
 @check_wireguard_installed
 async def wg_remove(_: Client, message: Message):
     wg = WireGuard()
@@ -455,14 +450,21 @@ async def wg_remove(_: Client, message: Message):
     await message.edit_text(f"<b>User ID: {user_id} removed from WireGuard</b>")
 
 
-@Client.on_message(command(["wgs"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@Client.on_message(command(["wgc"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
 @check_wireguard_installed
 async def wg_show(client: Client, message: Message):
     wg = WireGuard()
 
-    user_id = get_user_id(message)
+    user_id = message.chat.id
+    args = get_args_raw(message)
 
-    if not wg.get_client(str(user_id)):
+    if message.reply_to_message:
+        user_id = message.reply_to_message.from_user.id
+    if args and args.split(maxsplit=1)[0].lstrip("-").isdigit():
+        user_id = args
+
+    wg_client = wg.get_client(str(user_id))
+    if not wg_client:
         return await message.edit_text("<b>User does not exist</b>")
 
     client_config = wg.get_client_configuration(str(user_id))
@@ -481,12 +483,12 @@ async def wg_show(client: Client, message: Message):
 
     qr.make_image(fill_color="black", back_color="white").save(client_qr_binary)
 
-    await client.send_document(message.chat.id, client_config_binary, file_name="vpn.conf")
     await client.send_photo(
         message.chat.id,
         client_qr_binary,
-        caption=text_template,
+        caption=text_template.format(wg_client["name"]),
     )
+    await client.send_document(message.chat.id, client_config_binary, file_name="vpn.conf")
 
 
 @Client.on_message(command(["wge"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
@@ -534,80 +536,120 @@ async def wg_enable(_: Client, message: Message):
             return await message.edit_text("<b>Invalid arguments</b>")
 
 
+@Client.on_message(command(["wgn"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@check_wireguard_installed
+async def wg_update_user(_: Client, message: Message):
+    args = get_args_raw(message)
+    wg = WireGuard()
+
+    if not args:
+        user_id = str(message.chat.id)
+    elif args.lstrip("-").isdigit():
+        user_id = args.split()[0]
+        user_name = message.chat.first_name
+    elif len(args.split()) >= 2 and args.split()[0].lstrip("-").isdigit():
+        user_id = args.split()[0]
+        user_name = args.split(maxsplit=1)[1]
+    else:
+        return await message.edit_text("<b>Invalid arguments</b>")
+
+    if not wg.get_client(str(user_id)):
+        return await message.edit_text("<b>User does not exist</b>")
+
+    wg.update_client_name(str(user_id), str(user_name))
+
+    await message.edit_text(f"<b>WireGuard: Updated user {user_id} with name {user_name}</b>")
+
+
 @Client.on_message(command(["wgl"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
 @check_wireguard_installed
 async def wg_list(_: Client, message: Message):
-    wg = WireGuard()
     args = get_args_raw(message)
+    wg = WireGuard()
 
-    old_clients = wg.get_clients()
-    if not old_clients:
-        await message.edit_text("<b>No users found</b>")
-        return
+    clients = wg.get_clients()
+    if not clients:
+        return await message.edit_text("<b>No users found</b>")
 
-    start_time = datetime.datetime.now()
-    await asyncio.sleep(1)
-    new_clients = wg.get_clients()
-    time_elapsed = datetime.datetime.now() - start_time
+    if not args or args.lstrip("-").isdigit():
+        user_id = args if args.lstrip("-").isdigit() else str(message.chat.id)
+        client = wg.get_client(user_id)
+        if not client:
+            return await message.edit_text("<b>User does not exist</b>")
 
-    old_user = next((client for client in old_clients if client.get("id") == args), None)
-    if args and args.lstrip("-").isdigit() and old_user:
-        new_user = next((client for client in new_clients if client.get("id") == args), None)
+        full_client_old = wg.get_full_client(user_id)
+        await asyncio.sleep(1)
+        full_client_new = wg.get_full_client(user_id)
 
-        last_rx = old_user["transfer_rx"]
-        last_tx = old_user["transfer_tx"]
-        current_rx = new_user["transfer_rx"]
-        current_tx = new_user["transfer_tx"]
-        if new_user["latest_handshake_at"]:
-            rx_speed = (current_rx - last_rx) / time_elapsed.total_seconds()
-            tx_speed = (current_tx - last_tx) / time_elapsed.total_seconds()
+        latest_handshake_at = full_client_new.get("latest_handshake_at")
 
-        text = f"<b>Информация о пользователе {new_user['name']}</b> (<code>{new_user['id']}</code>)\n\n"
-        text += f"<b>Включен:</b> {'🟢' if new_user['enabled'] else '🔴'}\n"
-        text += f"<b>Адрес:</b> {new_user['address']}\n"
-        text += f"<b>Последний вход с:</b> {new_user['endpoint']}\n"
-        text += f"<b>Дата регистрации:</b> {new_user['created_at']}\n"
-        text += f"<b>Последнее изменение:</b> {new_user['updated_at']}\n"
+        if latest_handshake_at:
+            rx, tx = calculate_speed(
+                full_client_old.get("transfer_rx"),
+                full_client_new.get("transfer_rx"),
+                full_client_old.get("transfer_tx"),
+                full_client_new.get("transfer_tx"),
+                1,
+            )
 
-        if new_user["latest_handshake_at"] and (
-            datetime.datetime.now() - new_user["latest_handshake_at"]
-        ) < datetime.timedelta(minutes=5):
-            text += f"<b>Скорость:</b> ⬇️{rx_speed/1_000_000:.2f}MB/s ⬆️{tx_speed/1_000_000:.2f}MB/s \n"
-        elif new_user["latest_handshake_at"]:
-            text += f"<b>Последнее рукопожатие:</b> {new_user['latest_handshake_at']}\n"
-        else:
-            text += "\n"
+        result = f"<b>Information about user: {full_client_new.get('name')}</b> (<code>{full_client_new.get('id')}</code>)\n"
+        result += (
+            f"<b>Enabled:</b> {'🟢' if full_client_new.get('enabled') else '🔴'}\n"
+            f"<b>Address:</b> <code>{full_client_new.get('address')}</code>\n"
+            f"<b>Endpoint:</b> <code>{full_client_new.get('endpoint').split(':')[0]}</code>\n"
+            f"<b>Created at:</b> {full_client_new.get('created_at')} "
+            f"({arrow.get(full_client_new.get('created_at').timestamp()).humanize()})\n"
+            f"<b>Updated at:</b> {full_client_new.get('updated_at')} "
+            f"({arrow.get(full_client_new.get('updated_at').timestamp()).humanize()})\n"
+        )
 
-    else:
-        text = "🗓️ <b>Список всех пользователей:</b>\n\n"
+        if latest_handshake_at:
+            delta = datetime.datetime.now() - latest_handshake_at
+            result += (
+                f"<b>Speed:</b> ⬇️{rx} ⬆️{tx}\n"
+                if delta.total_seconds() < 300
+                else f"<b>Last handshake:</b> {latest_handshake_at} ({arrow.get(latest_handshake_at.timestamp()).humanize()})\n"
+            )
+    elif args == "all":
+        old_clients = wg.get_clients()
+        await asyncio.sleep(1)
+        new_clients = wg.get_clients()
+
+        result = "🗓️ <b>Information about all users:</b>\n"
         for count, client in enumerate(new_clients, start=1):
-            last_rx = old_clients[count - 1]["transfer_rx"]
-            last_tx = old_clients[count - 1]["transfer_tx"]
-            current_rx = client["transfer_rx"]
-            current_tx = client["transfer_tx"]
-            if client["latest_handshake_at"]:
-                rx_speed = (current_rx - last_rx) / time_elapsed.total_seconds()
-                tx_speed = (current_tx - last_tx) / time_elapsed.total_seconds()
+            latest_handshake_at = client.get("latest_handshake_at")
+            if latest_handshake_at:
+                rx, tx = calculate_speed(
+                    old_clients[count - 1].get("transfer_rx"),
+                    client.get("transfer_rx"),
+                    old_clients[count - 1].get("transfer_tx"),
+                    client.get("transfer_tx"),
+                    1,
+                )
 
-            text += f"{count}. {'🟢' if client['enabled'] else '🔴'} <code>{client['id']}</code>"
-            if client["latest_handshake_at"] and (
-                datetime.datetime.now() - client["latest_handshake_at"]
-            ) < datetime.timedelta(minutes=5):
-                text += f" - ⬇️{rx_speed/1_000_000:.2f}MB/s ⬆️{tx_speed/1_000_000:.2f}MB/s \n"
-            elif client["latest_handshake_at"]:
-                text += f" - 🤝 {client['latest_handshake_at']}\n"
+            result += f"{count}. {'🟢' if client.get('enabled') else '🔴'} <code>{client.get('id')}</code> "
+            if latest_handshake_at:
+                delta = datetime.datetime.now() - latest_handshake_at
+                result += (
+                    f"- ⬇️{rx} ⬆️{tx}\n"
+                    if delta.total_seconds() < 300
+                    else f"- 🤝 {arrow.get(latest_handshake_at.timestamp()).humanize()}\n"
+                )
             else:
-                text += "\n"
+                result += "\n"
+    else:
+        return await message.edit_text("<b>Invalid command usage</b>")
 
-    await message.edit_text(text)
+    await message.edit_text(result)
 
 
 modules_help["wireguard"] = {
-    "wga [user_id|reply]": "Add user to WireGuard and send config",
-    "wge [user_id|reply] [on|off]": "Enable/Disable WireGuard for user",
     "wgi": "Install WireGuard",
-    "wgl": "Show all users in WireGuard",
-    "wgr [user_id|reply]": "Remove user from WireGuard",
-    "wgs [user_id|reply]": "Show WireGuard config",
-    "wgu": "Uninstall WireGuard",
+    "wgr": "Remove WireGuard from your system",
+    "wgau [user_id|reply]": "Add user to WireGuard and send config",
+    "wgru [user_id|reply]": "Remove user from WireGuard",
+    "wgn [user_id] [name]": "Update WireGuard user name",
+    "wge [user_id|reply] [on|off]": "Enable/Disable WireGuard for user",
+    "wgl [user_id|all]": "Show info about user",
+    "wgc [user_id|reply]": "Send WireGuard config",
 }
