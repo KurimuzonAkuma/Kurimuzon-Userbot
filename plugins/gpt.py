@@ -53,7 +53,7 @@ async def chatpgt(_: Client, message: Message):
     try:
         completion = await openai.ChatCompletion.acreate(
             model="gpt-3.5-turbo",
-            messages=data["gpt_messages"] + [{"role": "bot", "content": args}],
+            messages=data["gpt_messages"] + [{"role": "user", "content": args}],
         )
     except error.RateLimitError:
         data["enabled"] = True
