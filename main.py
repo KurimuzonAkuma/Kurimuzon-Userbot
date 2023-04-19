@@ -1,10 +1,11 @@
+import os
 import asyncio
 import contextlib
 import logging
-import os
 import platform
 import shutil
 import subprocess
+
 from time import perf_counter
 
 from pyrogram import Client, idle
@@ -18,7 +19,6 @@ from utils.scripts import CustomFormatter, get_commits, restart
 if script_path != os.getcwd():
     os.chdir(script_path)
 
-
 async def main():
     stdout_handler = logging.StreamHandler()
     stdout_handler.setFormatter(
@@ -26,43 +26,43 @@ async def main():
     )
 
     logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[stdout_handler],
+        level = logging.INFO,
+        format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers = [stdout_handler],
     )
 
     commits = get_commits()
 
     app = Client(
         "KurimuzonUserbot",
-        api_hash=config.api_hash,
-        api_id=config.api_id,
-        # device_model="Kurimuzon-Userbot",
-        # system_version=f"{platform.version()} {platform.machine()}",
-        # app_version=f"@ {commits.get('branch')}-{commits.get('current_hash')[:7]}",
-        device_model="Redmi Redmi K40",
-        system_version="13 (33)",
-        app_version="9.5.8",
-        lang_code="ru",
-        hide_password=True,
-        plugins=dict(root="plugins"),
-        sleep_threshold=30,
-        workdir=script_path,
-        parse_mode=ParseMode.HTML,
+        api_hash = config.api_hash,
+        api_id = config.api_id,
+        # device_model = "Kurimuzon-Userbot",
+        # system_version = f"{platform.version()} {platform.machine()}",
+        # app_version = f"@ {commits.get('branch')}-{commits.get('current_hash')[:7]}",
+        device_model = "Redmi Redmi K40",
+        system_version = "13 (33)",
+        app_version = "9.5.8",
+        lang_code = "ru",
+        hide_password = True,
+        plugins = dict(root = "plugins"),
+        sleep_threshold = 30,
+        workdir = script_path,
+        parse_mode = ParseMode.HTML
     )
 
     await app.start()
 
-    async for _ in app.get_dialogs(limit=10):
+    async for _ in app.get_dialogs(limit = 10):
         pass
 
     if updater := db.get("core.updater", "restart_info"):
         if updater["type"] == "restart":
             logging.info(f"{app.me.username}#{app.me.id} | Userbot succesfully restarted.")
             await app.edit_message_text(
-                chat_id=updater["chat_id"],
-                message_id=updater["message_id"],
-                text=f"<code>Restarted in {perf_counter() - updater['time']:.3f}s...</code>",
+                chat_id = updater["chat_id"],
+                message_id = updater["message_id"],
+                text = f"<code>Restarted in {perf_counter() - updater['time']:.3f}s...</code>",
             )
         elif updater["type"] == "update":
             if updater["version"] == commits.get("current_hash"):
@@ -74,9 +74,9 @@ async def main():
                 )
             logging.info(f"{app.me.username}#{app.me.id} | {update_text}.")
             await app.edit_message_text(
-                chat_id=updater["chat_id"],
-                message_id=updater["message_id"],
-                text=(
+                chat_id = updater["chat_id"],
+                message_id = updater["message_id"],
+                text = (
                     f"<code>{update_text}. "
                     f"Restarted in {perf_counter() - updater['time']:.3f}s...</code>"
                 ),
@@ -91,11 +91,11 @@ async def main():
 
     for job in scheduler_jobs:
         scheduler.add_job(
-            func=job.func,
-            trigger=job.trigger,
-            args=[app] + job.args,
-            kwargs=job.kwargs,
-            id=job.id,
+            func = job.func,
+            trigger = job.trigger,
+            args = [app] + job.args,
+            kwargs = job.kwargs,
+            id = job.id
         )
 
     scheduler.start()
@@ -116,7 +116,7 @@ if __name__ == "__main__":
 
                 uvloop.install()
             except ImportError:
-                subprocess.run("pip install uvloop", shell=True)
+                subprocess.run("pip install uvloop", shell = True)
                 restart()
 
         if platform.python_version_tuple() >= ("3", "11"):
