@@ -53,19 +53,17 @@ def check_wireguard_installed(func):
 def calculate_speed(rx_old, rx_new, tx_old, tx_new, time_elapsed):
     rx_speed = (rx_new - rx_old) / time_elapsed
     tx_speed = (tx_new - tx_old) / time_elapsed
-    return format_speed(rx_speed), format_speed(tx_speed)
+    return format_bytes(rx_speed), format_bytes(tx_speed)
 
 
-# Format the speed to human readable format
-def format_speed(speed):
-    if speed < 1024:
-        return f"{speed:.2f}B/s"
-    elif speed < 1024 * 1024:
-        return f"{speed / 1024:.2f}KB/s"
-    elif speed < 1024 * 1024 * 1024:
-        return f"{speed / 1024 / 1024:.2f}MB/s"
-    else:
-        return f"{speed / 1024 / 1024 / 1024:.2f}GB/s"
+# Format the bytes to human readable format
+def format_bytes(bytes) -> str:
+    units = ["B", "KB", "MB", "GB"]
+    i = 0
+    while bytes >= 1024 and i < len(units) - 1:
+        bytes /= 1024.0
+        i += 1
+    return "{:.2f}{}".format(bytes, units[i])
 
 
 def sh_exec(cmd: str) -> str:
@@ -563,7 +561,7 @@ async def wg_update_user(_: Client, message: Message):
 
 @Client.on_message(command(["wgl"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
 @check_wireguard_installed
-async def wg_list(_: Client, message: Message):
+async def wg_list(client: Client, message: Message):
     args = get_args_raw(message)
     wg = WireGuard()
 
@@ -573,8 +571,8 @@ async def wg_list(_: Client, message: Message):
 
     if not args or args.lstrip("-").isdigit():
         user_id = args if args.lstrip("-").isdigit() else str(message.chat.id)
-        client = wg.get_client(user_id)
-        if not client:
+        wg_client = wg.get_client(user_id)
+        if not wg_client:
             return await message.edit_text("<b>User does not exist</b>")
 
         full_client_old = wg.get_full_client(user_id)
@@ -591,12 +589,20 @@ async def wg_list(_: Client, message: Message):
                 full_client_new.get("transfer_tx"),
                 1,
             )
+            rx_received = format_bytes(full_client_new.get("transfer_rx"))
+            tx_sent = format_bytes(full_client_new.get("transfer_tx"))
 
-        result = f"<b>Information about user: {full_client_new.get('name')}</b> (<code>{full_client_new.get('id')}</code>)\n"
-        result += (
+        result = (
+            f"<b>Information about user: {full_client_new.get('name')}</b> "
+            f"(<code>{full_client_new.get('id')}</code>)\n"
             f"<b>Enabled:</b> {'🟢' if full_client_new.get('enabled') else '🔴'}\n"
             f"<b>Address:</b> <code>{full_client_new.get('address')}</code>\n"
-            f"<b>Endpoint:</b> <code>{full_client_new.get('endpoint').split(':')[0]}</code>\n"
+        )
+        if latest_handshake_at:
+            result += (
+                f"<b>Endpoint:</b> <code>{full_client_new.get('endpoint').split(':')[0]}</code>\n"
+            )
+        result += (
             f"<b>Created at:</b> {full_client_new.get('created_at')} "
             f"({arrow.get(full_client_new.get('created_at').timestamp()).humanize()})\n"
             f"<b>Updated at:</b> {full_client_new.get('updated_at')} "
@@ -606,41 +612,73 @@ async def wg_list(_: Client, message: Message):
         if latest_handshake_at:
             delta = datetime.datetime.now() - latest_handshake_at
             result += (
-                f"<b>Speed:</b> ⬇️{rx} ⬆️{tx}\n"
+                f"<b>Speed:</b> 📥{rx}/s 📤{tx}/s\n"
                 if delta.total_seconds() < 300
-                else f"<b>Last handshake:</b> {latest_handshake_at} ({arrow.get(latest_handshake_at.timestamp()).humanize()})\n"
-            )
-    elif args == "all":
-        old_clients = wg.get_clients()
-        await asyncio.sleep(1)
-        new_clients = wg.get_clients()
-
-        result = "🗓️ <b>Information about all users:</b>\n"
-        for count, client in enumerate(new_clients, start=1):
-            latest_handshake_at = client.get("latest_handshake_at")
-            if latest_handshake_at:
-                rx, tx = calculate_speed(
-                    old_clients[count - 1].get("transfer_rx"),
-                    client.get("transfer_rx"),
-                    old_clients[count - 1].get("transfer_tx"),
-                    client.get("transfer_tx"),
-                    1,
+                else (
+                    f"<b>Last handshake:</b> {latest_handshake_at} "
+                    f"({arrow.get(latest_handshake_at.timestamp()).humanize()})\n"
                 )
+            )
+            result += f"<b>Data transferred:</b> 📥{rx_received} 📤{tx_sent}\n"
+        return await message.edit_text(result)
+    elif args == "all":
+        me = await client.get_me()
+        clients = wg.get_clients()
+        clients_strings = []
 
-            result += f"{count}. {'🟢' if client.get('enabled') else '🔴'} <code>{client.get('id')}</code> "
+        for count, wg_client in enumerate(clients, start=1):
+            result = ""
+            latest_handshake_at = wg_client.get("latest_handshake_at")
+            if latest_handshake_at:
+                rx_received = format_bytes(wg_client.get("transfer_rx"))
+                tx_sent = format_bytes(wg_client.get("transfer_tx"))
+
+            if me.is_premium:
+                if wg_client.get("enabled"):
+                    result += (
+                        "<emoji id=5206448940639067043>⬜️</emoji>"
+                        "<emoji id=5208594229558779394>🔳</emoji>"
+                    )
+                else:
+                    result += (
+                        "<emoji id=5208676628506353769>🔲</emoji>"
+                        "<emoji id=5208885192118247387>⬛️</emoji>"
+                    )
+            else:
+                result += f"{'🟢' if wg_client.get('enabled') else '🔴'} "
+
+            result += f"<code>{wg_client.get('id')}</code>"
+
             if latest_handshake_at:
                 delta = datetime.datetime.now() - latest_handshake_at
-                result += (
-                    f"- ⬇️{rx} ⬆️{tx}\n"
-                    if delta.total_seconds() < 300
-                    else f"- 🤝 {arrow.get(latest_handshake_at.timestamp()).humanize()}\n"
-                )
+                result += f" — 📥{rx_received} 📤{tx_sent}"
+                if delta.total_seconds() < 300:
+                    result += " — 🌐\n"
+                else:
+                    result += (
+                        f" — 📵<i>{arrow.get(latest_handshake_at.timestamp()).humanize()}</i>\n"
+                    )
             else:
                 result += "\n"
+            clients_strings.append(result)
+
+        max_group_size = 25
+
+        header = "🗓️ <b>Information about all users:</b>\n"
+        footer = f"\n<b>Total users:</b> {len(clients_strings)}"
+
+        if len(clients_strings) > max_group_size:
+            await message.edit_text(header + "".join(clients_strings[:max_group_size]))
+            for group in range(max_group_size, len(clients_strings), max_group_size):
+                result = "".join(clients_strings[group : group + max_group_size])
+                if len(clients_strings) - group < max_group_size:
+                    result += footer
+                await message.reply(result, quote=False)
+                await asyncio.sleep(0.5)
+        else:
+            return await message.edit_text(header + "".join(clients_strings) + footer)
     else:
         return await message.edit_text("<b>Invalid command usage</b>")
-
-    await message.edit_text(result)
 
 
 modules_help["wireguard"] = {
