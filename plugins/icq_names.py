@@ -445,6 +445,9 @@ async def nickname_handler(client: Client, message: Message):
             return await message.edit_text(
                 f"<emoji id=5260342697075416641>❌</emoji><b>Cant change name for now\n\nError{e}</b>"
             )
+        job = scheduler.get_job("icq_names")
+        if job:
+            job.resume()
     else:
         db.set("icq_names", "enabled", False)
         original_name = db.get("icq_names", "original_name")
@@ -555,6 +558,9 @@ async def nickname_trigger_handler(_: Client, message: Message):
 # First argument always should be client. Because it will be passed automatically in main.py
 async def icq_names_job(client: Client):
     if not db.get("icq_names", "enabled", False):
+        job = scheduler.get_job("icq_names")
+        if job:
+            job.pause()
         return
 
     with contextlib.suppress(Exception):
