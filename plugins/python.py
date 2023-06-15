@@ -13,21 +13,29 @@ from utils.misc import modules_help
 from utils.scripts import format_exc, paste_neko
 
 
-async def aexec(code, client, message):
+async def aexec(code, *args):
     temp_name = f"__{next(tempfile._get_candidate_names())}"
     code = (
-        f"async def {temp_name}(message, client):\n"
+        f"async def {temp_name}(client, message):\n"
         + " app = client\n"
         + " m = message\n"
-        + " r = message.reply_to_message\n"
+        + " r = m.reply_to_message\n"
         + "".join(f"\n {_l}" for _l in code.split("\n"))
     )
 
     f = StringIO()
     exec(code)
     with redirect_stdout(f):
-        await locals()[temp_name](message, client)
+        await locals()[temp_name](*args)
+
     return f.getvalue()
+
+
+async def texec(code: str, *args, timeout=60):
+    try:
+        return await asyncio.wait_for(aexec(code, *args), timeout)
+    except asyncio.exceptions.TimeoutError as e:
+        raise asyncio.exceptions.TimeoutError("Timeout reached") from e
 
 
 async def interpreter_task(client: Client, message: Message):
@@ -44,7 +52,7 @@ async def interpreter_task(client: Client, message: Message):
 
     try:
         start_time = perf_counter()
-        result = await aexec(code, client, message)
+        result = await texec(code, client, message)
         stop_time = perf_counter()
 
         if len(result) > 4000:
@@ -64,7 +72,7 @@ async def interpreter_task(client: Client, message: Message):
         else:
             await message.edit(text)
     except Exception as ex:
-        await message.edit(
+        return await message.edit(
             "<b><emoji id=5821388137443626414>🌐</emoji> Language:</b>\n<code>Python</code>\n\n"
             f"<b><emoji id=5431376038628171216>💻</emoji> Code:</b>\n"
             f"<code>{html.escape(code)}</code>\n\n"
@@ -77,7 +85,7 @@ async def interpreter_task(client: Client, message: Message):
     ~filters.scheduled & command(["py", "pyne", "rpy", "rpyne"]) & filters.me & ~filters.forwarded
 )
 async def user_exec(client: Client, message: Message):
-    client.loop.create_task(interpreter_task(client, message))
+    await asyncio.create_task(interpreter_task(client, message))
 
 
 modules_help["python"] = {
