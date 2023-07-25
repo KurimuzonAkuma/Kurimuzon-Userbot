@@ -5,7 +5,9 @@ from pyrogram import Client
 from pyrogram.filters import Filter, create
 from pyrogram.types import Message
 
-from utils.db import db
+from utils.scripts import get_prefix
+
+reactions_filter = create(lambda _, __, message: bool(message.reactions))
 
 
 def command(commands: Union[str, List[str]], case_sensitive: bool = False):
@@ -34,7 +36,7 @@ def command(commands: Union[str, List[str]], case_sensitive: bool = False):
         if not text:
             return False
 
-        for prefix in db.get("core.main", "prefix", default="."):
+        for prefix in get_prefix():
             if not text.startswith(prefix):
                 continue
 
