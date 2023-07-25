@@ -50,20 +50,25 @@ async def interpreter_task(client: Client, message: Message):
 
     await message.edit("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
 
+    result_header = (
+        "<b><emoji id=5821388137443626414>🌐</emoji> Language:</b>\n<code>Python</code>\n\n"
+        "<b><emoji id=5431376038628171216>💻</emoji> Code:</b>\n"
+        f'<pre language="python">{html.escape(code)}</pre>\n\n'
+    )
+
     try:
         start_time = perf_counter()
         result = await texec(code, client, message)
         stop_time = perf_counter()
 
-        if len(result) > 4000:
-            result = await paste_neko(result)
+        if len(result) > 3072:
+            result = html.escape(await paste_neko(result))
+        else:
+            result = f"<code>{html.escape(result)}</code>"
 
         text = (
-            "<b><emoji id=5821388137443626414>🌐</emoji> Language:</b>\n<code>Python</code>\n\n"
-            "<b><emoji id=5431376038628171216>💻</emoji> Code:</b>\n"
-            f'<pre language="python">{html.escape(code)}</pre>\n\n'
-            "<b><emoji id=5472164874886846699>✨</emoji> Result</b>:\n"
-            f"<code>{html.escape(result)}</code>\n"
+            result_header + "<b><emoji id=5472164874886846699>✨</emoji> Result</b>:\n"
+            f"{result}\n"
             f"<b>Completed in {round(stop_time - start_time, 5)}s.</b>"
         )
 
@@ -73,10 +78,7 @@ async def interpreter_task(client: Client, message: Message):
             await message.edit(text)
     except Exception as ex:
         return await message.edit(
-            "<b><emoji id=5821388137443626414>🌐</emoji> Language:</b>\n<code>Python</code>\n\n"
-            f"<b><emoji id=5431376038628171216>💻</emoji> Code:</b>\n"
-            f"<code>{html.escape(code)}</code>\n\n"
-            f"<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n"
+            result_header + "<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n"
             f"<code>{format_exc(ex)}</code>",
         )
 
@@ -85,7 +87,7 @@ async def interpreter_task(client: Client, message: Message):
     ~filters.scheduled & command(["py", "pyne", "rpy", "rpyne"]) & filters.me & ~filters.forwarded
 )
 async def user_exec(client: Client, message: Message):
-    await asyncio.create_task(interpreter_task(client, message))
+    asyncio.create_task(interpreter_task(client, message))
 
 
 modules_help["python"] = {
