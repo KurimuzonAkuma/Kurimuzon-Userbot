@@ -2,9 +2,9 @@ aiohttp
 aiosqlite
 apscheduler
 arrow
-environs
 GitPython
 pyrogram
+python-dotenv
 qrcode
 requests
 tgcrypto

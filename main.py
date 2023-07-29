@@ -46,6 +46,7 @@ async def main():
         sleep_threshold=30,
         workdir=script_path,
         parse_mode=ParseMode.HTML,
+        **config.proxy_settings,
     )
 
     await app.start()
