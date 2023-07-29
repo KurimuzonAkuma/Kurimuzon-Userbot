@@ -20,7 +20,6 @@ from utils.scripts import with_reply
 @Client.on_message(command(["story"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
 @with_reply
 async def post_story(client: Client, message: Message):
-
     if message.reply_to_message.media.value not in ["photo", "video", "animation"]:
         return await message.edit_text("Only photos and videos and GIFs are supported!")
 
