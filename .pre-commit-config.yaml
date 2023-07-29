@@ -15,6 +15,7 @@ repos:
       - id: isort
         types: [python]
         args: [
+            '--profile=black',
             '--line-length=99',
             '--trailing-comma',
             '--use-parentheses',
