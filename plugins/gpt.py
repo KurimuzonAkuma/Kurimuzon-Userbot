@@ -1,3 +1,5 @@
+import asyncio
+
 import openai
 from openai import error
 from pyrogram import Client, enums, filters
@@ -6,21 +8,24 @@ from pyrogram.types import Message
 from utils.db import db
 from utils.filters import command
 from utils.misc import modules_help
-from utils.scripts import get_args_raw
+from utils.scripts import get_args_raw, with_args
 
 
-@Client.on_message(
-    command(["g", "gpt", "chatgpt"]) & filters.me & ~filters.forwarded & ~filters.scheduled
-)
+@Client.on_message(command(["gpt", "rgpt"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
 async def chatpgt(_: Client, message: Message):
-    args = get_args_raw(message)
+    if message.command[0] == "rgpt":
+        args = get_args_raw(message, use_reply=True)
+    else:
+        args = get_args_raw(message)
+
     if not args:
         return await message.reply(
             "<emoji id=5260342697075416641>❌</emoji><b> You didn't ask a question GPT</b>",
             quote=True,
         )
+
     api_key = db.get("ChatGPT", "api_key")
-    if api_key is None:
+    if not api_key:
         return await message.reply(
             "<emoji id=5260342697075416641>❌</emoji><b> You didn't provide an api key for GPT</b>",
             quote=True,
@@ -61,32 +66,27 @@ async def chatpgt(_: Client, message: Message):
         return await msg.edit_text(
             "<emoji id=5260342697075416641>❌</emoji><b> Model is currently overloaded with other requests.</b>"
         )
-    except Exception:
+    except Exception as e:
         data["enabled"] = True
         db.set("ChatGPT", f"gpt_id{message.chat.id}", data)
         return await msg.edit_text(
-            "<emoji id=5260342697075416641>❌</emoji><b> Something went wrong.</b>"
+            f"<emoji id=5260342697075416641>❌</emoji><b> Something went wrong: {e}</b>"
         )
 
     response = completion.choices[0].message.content
 
-    await msg.edit_text(response, parse_mode=enums.ParseMode.MARKDOWN)
     data["gpt_messages"].append({"role": "user", "content": args})
     data["gpt_messages"].append({"role": completion.choices[0].message.role, "content": response})
     data["enabled"] = True
     db.set("ChatGPT", f"gpt_id{message.chat.id}", data)
 
+    await msg.edit_text(response, parse_mode=enums.ParseMode.MARKDOWN)
 
-@Client.on_message(
-    command(["gst", "gptst"]) & filters.me & ~filters.forwarded & ~filters.scheduled
-)
+
+@Client.on_message(command(["gptst"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@with_args("<emoji id=5260342697075416641>❌</emoji><b> You didn't provide an api key</b>")
 async def chatpgt_set_key(_: Client, message: Message):
     args = get_args_raw(message)
-    if not args:
-        await message.edit_text(
-            "<emoji id=5260342697075416641>❌</emoji><b> You didn't provide an api key</b>"
-        )
-        return
 
     db.set("ChatGPT", "api_key", args)
     await message.edit_text(
@@ -94,9 +94,7 @@ async def chatpgt_set_key(_: Client, message: Message):
     )
 
 
-@Client.on_message(
-    command(["gcl", "gptcl"]) & filters.me & ~filters.forwarded & ~filters.scheduled
-)
+@Client.on_message(command(["gptcl"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
 async def chatpgt_clear(_: Client, message: Message):
     db.remove("ChatGPT", f"gpt_id{message.chat.id}")
 
@@ -106,7 +104,8 @@ async def chatpgt_clear(_: Client, message: Message):
 
 
 modules_help["gpt"] = {
-    "g [query]": "Ask ChatGPT",
-    "gst": "Set GPT api key",
-    "gcl": "Clear GPT messages context",
+    "gpt [query]": "Ask ChatGPT",
+    "rgpt [reply]": "Ask ChatGPT from replied message",
+    "gptst": "Set GPT api key",
+    "gptcl": "Clear GPT messages context",
 }
