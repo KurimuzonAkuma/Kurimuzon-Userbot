@@ -152,13 +152,28 @@ def get_prefix():
     return db.get("core.main", "prefix", default=".")
 
 
-def get_args_raw(message: typing.Union[Message, str]) -> str:
+def get_args_raw(message: typing.Union[Message, str], use_reply: bool = None) -> str:
+    """Returns text after command.
+
+    Args:
+        message (typing.Union[Message, str]): Message or text.
+
+        use_reply (bool, optional): Try to get args from reply message if no args in message. Defaults to None.
+
+    Returns:
+        str: Text after command or empty string.
+    """
     if isinstance(message, Message):
-        message = message.text
+        text = message.text or message.caption
+        args = text.split(maxsplit=1)[1] if len(text.split()) > 1 else ""
+
+        if use_reply and not args:
+            args = message.reply_to_message.text or message.reply_to_message.caption
+
     elif not isinstance(message, str):
         return ""
 
-    return args[1] if len(args := message.split(maxsplit=1)) > 1 else ""
+    return args or ""
 
 
 class ScheduleJob:
