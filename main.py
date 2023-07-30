@@ -71,19 +71,19 @@ async def main():
                 text=f"<code>Restarted in {perf_counter() - updater['time']:.3f}s...</code>",
             )
         elif updater["type"] == "update":
-            if updater["version"] == f"{current_hash} ({current_version})":
+            if updater["hash"] == current_hash:
                 update_text = f"Userbot is up to date with {repo.active_branch} branch"
             else:
                 update_text = (
-                    f"Userbot succesfully updated {updater['version']}.."
-                    f"{current_hash}..{latest_hash}"
+                    f"Userbot succesfully updated from {updater['hash'][:7]} "
+                    f"({updater['version']}) to {current_hash[:7]} ({current_version}) version."
                 )
             logging.info(f"{app.me.username}#{app.me.id} | {update_text}.")
             await app.edit_message_text(
                 chat_id=updater["chat_id"],
                 message_id=updater["message_id"],
                 text=(
-                    f"<code>{update_text}. "
+                    f"<code>{update_text}.\n\n"
                     f"Restarted in {perf_counter() - updater['time']:.3f}s...</code>"
                 ),
             )

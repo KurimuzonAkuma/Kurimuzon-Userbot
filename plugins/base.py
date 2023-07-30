@@ -78,7 +78,8 @@ async def _update(_: Client, message: Message):
             "chat_id": message.chat.id,
             "message_id": message.id,
             "time": perf_counter(),
-            "version": f"{current_hash} ({current_version})",
+            "hash": current_hash,
+            "version": f"{current_version}",
             "type": "update",
         },
     )
