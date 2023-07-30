@@ -63,7 +63,7 @@ async def _restart(_: Client, message: Message):
 @Client.on_message(~filters.scheduled & command(["update"]) & filters.me & ~filters.forwarded)
 async def _update(_: Client, message: Message):
     repo = git.Repo()
-    repo.remotes.origin.fetch()
+    subprocess.run(["git", "fetch"])
     current_hash = repo.head.commit.hexsha
     latest_hash = repo.remotes.origin.refs.master.commit.hexsha
     latest_version = len(list(repo.iter_commits())) + 1
@@ -86,7 +86,6 @@ async def _update(_: Client, message: Message):
 
     try:
         subprocess.run([sys.executable, "-m", "pip", "install", "-U", "pip"])
-        subprocess.run(["git", "fetch"])
         subprocess.run(["git", "pull"])
         subprocess.run(
             [
@@ -157,7 +156,7 @@ async def _status(_, message: Message):
     cpu_usage = get_cpu_usage()
     ram_usage = get_ram_usage()
     repo = git.Repo()
-    repo.remotes.origin.fetch()
+    subprocess.run(["git", "fetch"])
     current_hash = repo.head.commit.hexsha
     latest_hash = repo.remotes.origin.refs.master.commit.hexsha
     latest_version = len(list(repo.iter_commits())) + 1
