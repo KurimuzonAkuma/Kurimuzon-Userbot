@@ -189,7 +189,9 @@ class ScheduleJob:
     def __init__(
         self,
         func: callable,
-        trigger: typing.Optional[typing.Union[CronTrigger, IntervalTrigger]] = None,
+        trigger: typing.Optional[typing.Union[CronTrigger, IntervalTrigger]] = IntervalTrigger(
+            seconds=3600
+        ),
         *args,
         **kwargs,
     ):
@@ -197,13 +199,6 @@ class ScheduleJob:
         self.args = args or []
         self.kwargs = kwargs or {}
         self.id = func.__name__
-
-        trigger_data = db.get("triggers", self.id, {"type": "interval", "value": 3600})
-        if trigger_data["type"] == "cron":
-            trigger = CronTrigger.from_crontab(trigger_data["value"])
-        else:
-            trigger = IntervalTrigger(seconds=trigger_data["value"])
-
         self.trigger = trigger
 
 
@@ -262,7 +257,7 @@ class Command:
 class Module:
     def __init__(self, name: str, path: str):
         self.name = name
-        self.path = __file__
+        self.path = path
         self.commands = {}
         self.hidden = False
 

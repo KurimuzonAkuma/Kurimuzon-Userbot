@@ -136,13 +136,15 @@ async def sendmod(client: Client, message: Message):
             await message.delete()
             text = modules_help.module_help(module_name, False)
             if os.path.isfile(modules_help.modules[module_name].path):
-                await message.send_document(
-                    message.chat.id, modules_help.modules[module_name].path, caption=text
+                await client.send_document(
+                    message.chat.id,
+                    modules_help.modules[module_name].path,
+                    caption=text,
                 )
         else:
             await message.edit(f"<b>Module {module_name} not found!</b>")
     except Exception as e:
-        await message.edit(format_exc(e))
+        await message.reply(format_exc(e), quote=False)
 
 
 @Client.on_message(~filters.scheduled & command(["status"]) & filters.me & ~filters.forwarded)
