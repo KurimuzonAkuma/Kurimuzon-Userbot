@@ -103,9 +103,8 @@ async def chatpgt_clear(_: Client, message: Message):
     )
 
 
-modules_help["gpt"] = {
-    "gpt [query]": "Ask ChatGPT",
-    "rgpt [reply]": "Ask ChatGPT from replied message",
-    "gptst": "Set GPT api key",
-    "gptcl": "Clear GPT messages context",
-}
+module = modules_help.add_module("chatgpt", __file__)
+module.add_command("gpt", "Ask ChatGPT", "[query]")
+module.add_command("rgpt", "Ask ChatGPT from replied message", "[reply]")
+module.add_command("gptst", "Set GPT api key")
+module.add_command("gptcl", "Clear GPT messages context")

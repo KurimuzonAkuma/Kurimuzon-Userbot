@@ -38,6 +38,5 @@ async def vnote(client: Client, message: Message):
             )
 
 
-modules_help["vnote"] = {
-    "vnote [reply]": "Make video note from reply video",
-}
+module = modules_help.add_module("vnote", __file__)
+module.add_command("vnote", "Make video note from reply video", "[reply]")

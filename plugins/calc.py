@@ -17,4 +17,5 @@ async def calc(_, message: Message):
         await message.edit(f"<i>{args}</i><b> = </b><code>{e}</code>")
 
 
-modules_help["calculator"] = {"calc [expression]*": "Evaluate expression and return result"}
+module = modules_help.add_module("calculator", __file__)
+module.add_command("calc", "Evaluate expression and return result", "[expression]*", ["c"])

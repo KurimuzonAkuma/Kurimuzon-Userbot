@@ -7,13 +7,14 @@ import shutil
 import subprocess
 from time import perf_counter
 
+import git
 from pyrogram import Client, idle
 from pyrogram.enums import ParseMode
 
 from utils import config
 from utils.db import db
 from utils.misc import scheduler, scheduler_jobs, script_path
-from utils.scripts import CustomFormatter, get_commits, restart
+from utils.scripts import CustomFormatter, restart
 
 if script_path != os.getcwd():
     os.chdir(script_path)
@@ -30,8 +31,6 @@ async def main():
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[stdout_handler],
     )
-
-    commits = get_commits()
 
     app = Client(
         "KurimuzonUserbot",
@@ -51,8 +50,17 @@ async def main():
 
     await app.start()
 
-    async for _ in app.get_dialogs(limit=10):
+    async for _ in app.get_dialogs(limit=100):
         pass
+
+    repo = git.Repo()
+    repo.remotes.origin.fetch()
+    current_hash = repo.head.commit.hexsha
+    latest_hash = repo.remotes.origin.refs.master.commit.hexsha
+    latest_version = len(list(repo.iter_commits())) + 1
+    current_version = latest_version - (
+        len(list(repo.iter_commits(f"{current_hash}..{latest_hash}"))) + 1
+    )
 
     if updater := db.get("core.updater", "restart_info"):
         if updater["type"] == "restart":
@@ -63,12 +71,12 @@ async def main():
                 text=f"<code>Restarted in {perf_counter() - updater['time']:.3f}s...</code>",
             )
         elif updater["type"] == "update":
-            if updater["version"] == commits.get("current_hash"):
-                update_text = f"Userbot is up to date with {commits.get('branch')} branch"
+            if updater["version"] == f"{current_hash} ({current_version})":
+                update_text = f"Userbot is up to date with {repo.active_branch} branch"
             else:
                 update_text = (
-                    f"Userbot succesfully updated {updater['version'][:7]}.."
-                    f"{commits.get('current_hash')[:7]}"
+                    f"Userbot succesfully updated {updater['version']}.."
+                    f"{current_hash}..{latest_hash}"
                 )
             logging.info(f"{app.me.username}#{app.me.id} | {update_text}.")
             await app.edit_message_text(
@@ -82,8 +90,8 @@ async def main():
         db.remove("core.updater", "restart_info")
     else:
         logging.info(
-            f"{app.me.username}#{app.me.id} on {commits.get('branch')}"
-            f"@{commits.get('current_hash')[:7]}"
+            f"{app.me.username}#{app.me.id} on {repo.active_branch}"
+            f"@{current_hash[:7]}"
             " | Userbot succesfully started."
         )
 

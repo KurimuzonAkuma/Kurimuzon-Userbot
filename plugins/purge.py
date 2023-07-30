@@ -33,7 +33,8 @@ async def purge(client: Client, message: Message):
         await client.delete_messages(message.chat.id, chunk)
 
 
-modules_help["purge"] = {
-    "purge [reply]": "Purge (delete all messages) chat from replied message to last",
-    "del [reply]": "Delete replied message",
-}
+module = modules_help.add_module("purge", __file__)
+module.add_command(
+    "purge", "Purge (delete all messages) chat from replied message to last", "[reply]"
+)
+module.add_command("del", "Delete replied message", "[reply]")

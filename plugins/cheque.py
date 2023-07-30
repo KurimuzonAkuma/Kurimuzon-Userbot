@@ -9,7 +9,7 @@ from utils.misc import modules_help
 from utils.scripts import with_args
 
 
-@Client.on_message(~filters.scheduled & viabot("CryptoBot") & ~filters.me)
+@Client.on_message(viabot("CryptoBot") & ~filters.me, group=1)
 async def cheque_hunter(client: Client, message: Message):
     if not message.reply_markup:
         return
@@ -38,6 +38,5 @@ async def cheque_toggle(_: Client, message: Message):
         await message.edit_text("Чек-хантер выключен.")
 
 
-modules_help["cheque"] = {
-    "cheque [on/off]": "On/Off CryptoBot cheque hunter",
-}
+module = modules_help.add_module("cheque", __file__)
+module.add_command("cheque", "On/Off CryptoBot cheque hunter", "[on/off]")

@@ -3,6 +3,7 @@ aiosqlite
 apscheduler
 arrow
 GitPython
+psutil
 pyrogram
 python-dotenv
 qrcode

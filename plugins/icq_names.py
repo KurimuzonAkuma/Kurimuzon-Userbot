@@ -569,8 +569,7 @@ async def icq_names_job(client: Client):
 
 scheduler_jobs.append(ScheduleJob(icq_names_job))
 
-modules_help["icq"] = {
-    "icq [on/off]": "Turn on/off icq names",
-    "icqt": "Set trigger for icq names",
-    "icqr": "Change name to random one immediately",
-}
+module = modules_help.add_module("icq", __file__)
+module.add_command("icq", "Turn on/off icq names", "[on/off]")
+module.add_command("icqt", "Set trigger for icq names", "[cron/interval] [values]")
+module.add_command("icqr", "Change name to random one immediately")

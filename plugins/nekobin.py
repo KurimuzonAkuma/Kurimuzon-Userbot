@@ -17,7 +17,6 @@ async def nekobin(client: Client, message: Message):
     )
 
 
-modules_help["nekobin"] = {
-    "nekobin [code]": "Paste text on nekobin",
-    "neko [code]": "Paste text on nekobin",
-}
+module = modules_help.add_module("nekobin", __file__)
+module.add_command("nekobin", "Paste text on nekobin", "[code]")
+module.add_command("neko", "Paste text on nekobin", "[code]")

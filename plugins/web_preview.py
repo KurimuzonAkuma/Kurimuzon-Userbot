@@ -19,7 +19,6 @@ async def web_preview(_, message: Message):
     await message.reply_photo(photo=f"https://mini.s-shot.ru/1024x768/JPEG/1024/Z100/?{args}")
 
 
-modules_help["web_preview"] = {
-    "wp [link to site]": "Send web preview of site",
-    "wpr [reply to message]": "Send web preview of site from replied message",
-}
+module = modules_help.add_module("web_preview", __file__)
+module.add_command("wp", "Send web preview of site", "[link to site]")
+module.add_command("wpr", "Send web preview of site from replied message", "[reply to message]")

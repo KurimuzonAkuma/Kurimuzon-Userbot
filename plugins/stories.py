@@ -54,6 +54,5 @@ async def post_story(client: Client, message: Message):
     await message.edit_text("Story posted!")
 
 
-modules_help["stories"] = {
-    "story [reply]*": "Post story from reply",
-}
+module = modules_help.add_module("stories", __file__)
+module.add_command("story", "Post story from reply", "[reply]")

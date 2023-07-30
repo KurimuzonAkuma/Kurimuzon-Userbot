@@ -15,6 +15,5 @@ async def ping(_, message: Message):
     await message.edit(f"<b>Pong! {round(end - start, 3)}s</b>")
 
 
-modules_help["ping"] = {
-    "ping": "Check ping to Telegram servers",
-}
+module = modules_help.add_module("ping", __file__)
+module.add_command("ping", "Check ping to Telegram servers", aliases=["p"])

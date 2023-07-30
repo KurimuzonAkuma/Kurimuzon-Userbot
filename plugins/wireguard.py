@@ -681,13 +681,12 @@ async def wg_list(client: Client, message: Message):
         return await message.edit_text("<b>Invalid command usage</b>")
 
 
-modules_help["wireguard"] = {
-    "wgi": "Install WireGuard",
-    "wgr": "Remove WireGuard from your system",
-    "wgau [user_id|reply]": "Add user to WireGuard and send config",
-    "wgru [user_id|reply]": "Remove user from WireGuard",
-    "wgn [user_id] [name]": "Update WireGuard user name",
-    "wge [user_id|reply] [on|off]": "Enable/Disable WireGuard for user",
-    "wgl [user_id|all]": "Show info about user",
-    "wgc [user_id|reply]": "Send WireGuard config",
-}
+module = modules_help.add_module("wireguard", __file__)
+module.add_command("wgi", "Install WireGuard")
+module.add_command("wgr", "Remove WireGuard from your system")
+module.add_command("wgau", "Add user to WireGuard and send config", "[user_id|reply]")
+module.add_command("wgru", "Remove user from WireGuard", "[user_id|reply]")
+module.add_command("wgn", "Update WireGuard user name", "[user_id] [name]")
+module.add_command("wge", "Enable/Disable WireGuard for user", "[user_id|reply] [on|off]")
+module.add_command("wgl", "Show info about user", "[user_id|all]")
+module.add_command("wgc", "Send WireGuard config", "[user_id|reply]")

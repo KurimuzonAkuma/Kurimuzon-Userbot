@@ -90,8 +90,8 @@ async def user_exec(client: Client, message: Message):
     asyncio.create_task(interpreter_task(client, message))
 
 
-modules_help["python"] = {
-    "py [python code]": "Execute Python code",
-    "pyne [python code]": "Execute Python code and return result with reply",
-    "rpy": "Execute Python code from reply",
-}
+module = modules_help.add_module("python", __file__)
+module.add_command("py", "Execute Python code", "[code]")
+module.add_command("pyne", "Execute Python code and return result with reply", "[code]")
+module.add_command("rpy", "Execute Python code from reply")
+module.add_command("rpyne", "Execute Python code from reply and return result with reply")

@@ -49,4 +49,5 @@ async def shell(_, message: types.Message):
     cmd_obj.kill()
 
 
-modules_help["shell"] = {"sh [command]": "Execute command in shell"}
+module = modules_help.add_module("shell", __file__)
+module.add_command("shell", "Execute command in shell", "[command]", ["sh"])

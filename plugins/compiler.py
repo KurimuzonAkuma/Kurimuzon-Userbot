@@ -164,9 +164,8 @@ async def lua_compiler(_, message: Message):
         await message.edit_text(result)
 
 
-modules_help["compiler"] = {
-    "gcc [code]": "Execute C code",
-    "gpp [code]": "Execute C++ code",
-    "go [code]": "Execute Go code",
-    "lua [code]": "Execute Lua code",
-}
+module = modules_help.add_module("compiler", __file__)
+module.add_command("gcc", "Execute C code", "[code]")
+module.add_command("gpp", "Execute C++ code", "[code]")
+module.add_command("go", "Execute Go code", "[code]")
+module.add_command("lua", "Execute Lua code", "[code]")

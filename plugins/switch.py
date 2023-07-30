@@ -25,6 +25,5 @@ async def switch(client: Client, message: Message):
     await message.edit(str.translate(text, table))
 
 
-modules_help["switch"] = {
-    "sw [reply/text for switch]*": "Useful when tou forgot to change the keyboard layout",
-}
+module = modules_help.add_module("switch", __file__)
+module.add_command("switch", "Switch keyboard layout", "[reply/text for switch]*", ["sw"])
