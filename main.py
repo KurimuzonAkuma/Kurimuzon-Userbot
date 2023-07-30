@@ -71,7 +71,9 @@ async def main():
                 text=f"<code>Restarted in {perf_counter() - updater['time']:.3f}s...</code>",
             )
         elif updater["type"] == "update":
-            if updater["hash"] == current_hash:
+            if updater.get("hash") is None:
+                update_text = "Userbot succesfully updated to the latest version."
+            elif updater["hash"] == current_hash:
                 update_text = f"Userbot is up to date with {repo.active_branch} branch"
             else:
                 update_text = (
