@@ -382,8 +382,6 @@ class ModuleHelp:
                 if cmd.name == command or (cmd.aliases and command in cmd.aliases):
                     command = cmd
                     break
-                if command in module.commands:
-                    break
             else:
                 continue
             break
