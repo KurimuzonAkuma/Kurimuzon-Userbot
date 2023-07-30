@@ -182,22 +182,24 @@ async def _status(_, message: Message):
         return await message.edit(result, disable_web_page_preview=True)
 
     result += "<b>Bot status:</b>\n"
-    result += f"<b>Uptime:</b> <code>{uptime.humanize(current_time, only_distance=True)}</code>\n"
-    result += f"<b>Branch:</b> <code>{repo.active_branch}</code>\n"
-    result += f"<b>Current version:</b> <a href='{repo_link}/commit/{current_hash}'>"
-    result += f"#{current_hash[:7]} ({current_version})</a>\n"
-    result += f"<b>Latest version:</b> <a href='{repo_link}/commit/{latest_hash}'>"
-    result += f"#{latest_hash[:7]} ({latest_version})</a>\n"
-    result += f"<b>Prefix:</b> <code>{prefix}</code>\n"
-    result += f"<b>Modules:</b> <code>{modules_help.modules_count}</code>\n"
-    result += f"<b>Commands:</b> <code>{modules_help.commands_count}</code>\n\n"
+    result += (
+        f"├─<b>Uptime:</b> <code>{uptime.humanize(current_time, only_distance=True)}</code>\n"
+    )
+    result += f"├─<b>Branch:</b> <code>{repo.active_branch}</code>\n"
+    result += f"├─<b>Current version:</b> <a href='{repo_link}/commit/{current_hash}'>"
+    result += f"├─#{current_hash[:7]} ({current_version})</a>\n"
+    result += f"├─<b>Latest version:</b> <a href='{repo_link}/commit/{latest_hash}'>"
+    result += f"├─#{latest_hash[:7]} ({latest_version})</a>\n"
+    result += f"├─<b>Prefix:</b> <code>{prefix}</code>\n"
+    result += f"├─<b>Modules:</b> <code>{modules_help.modules_count}</code>\n"
+    result += f"└─<b>Commands:</b> <code>{modules_help.commands_count}</code>\n\n"
 
     result += "<b>System status:</b>\n"
-    result += f"<b>OS:</b> <code>{sys.platform}</code>\n"
-    result += f"<b>Kernel:</b> <code>{kernel_version}</code>\n"
-    result += f"<b>Uptime:</b> <code>{system_uptime}</code>\n"
-    result += f"<b>CPU usage:</b> <code>{cpu_usage}%</code>\n"
-    result += f"<b>RAM usage:</b> <code>{ram_usage}MB</code>"
+    result += f"├─<b>OS:</b> <code>{sys.platform}</code>\n"
+    result += f"├─<b>Kernel:</b> <code>{kernel_version}</code>\n"
+    result += f"├─<b>Uptime:</b> <code>{system_uptime}</code>\n"
+    result += f"├─<b>CPU usage:</b> <code>{cpu_usage}%</code>\n"
+    result += f"└─<b>RAM usage:</b> <code>{ram_usage}MB</code>"
 
     await message.edit(result, disable_web_page_preview=True)
 
