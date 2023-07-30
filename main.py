@@ -57,7 +57,7 @@ async def main():
     subprocess.run(["git", "fetch"])
     current_hash = repo.head.commit.hexsha
     latest_hash = repo.remotes.origin.refs.master.commit.hexsha
-    latest_version = len(list(repo.iter_commits())) + 1
+    latest_version = len(list(repo.iter_commits()))
     current_version = latest_version - (
         len(list(repo.iter_commits(f"{current_hash}..{latest_hash}"))) + 1
     )

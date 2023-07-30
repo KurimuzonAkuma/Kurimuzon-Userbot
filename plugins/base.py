@@ -66,7 +66,7 @@ async def _update(_: Client, message: Message):
     subprocess.run(["git", "fetch"])
     current_hash = repo.head.commit.hexsha
     latest_hash = repo.remotes.origin.refs.master.commit.hexsha
-    latest_version = len(list(repo.iter_commits())) + 1
+    latest_version = len(list(repo.iter_commits()))
     current_version = latest_version - (
         len(list(repo.iter_commits(f"{current_hash}..{latest_hash}"))) + 1
     )
@@ -162,7 +162,7 @@ async def _status(_, message: Message):
     subprocess.run(["git", "fetch"])
     current_hash = repo.head.commit.hexsha
     latest_hash = repo.remotes.origin.refs.master.commit.hexsha
-    latest_version = len(list(repo.iter_commits())) + 1
+    latest_version = len(list(repo.iter_commits()))
     current_version = latest_version - (
         len(list(repo.iter_commits(f"{current_hash}..{latest_hash}"))) + 1
     )
@@ -187,9 +187,9 @@ async def _status(_, message: Message):
     )
     result += f"├─<b>Branch:</b> <code>{repo.active_branch}</code>\n"
     result += f"├─<b>Current version:</b> <a href='{repo_link}/commit/{current_hash}'>"
-    result += f"├─#{current_hash[:7]} ({current_version})</a>\n"
+    result += f"#{current_hash[:7]} ({current_version})</a>\n"
     result += f"├─<b>Latest version:</b> <a href='{repo_link}/commit/{latest_hash}'>"
-    result += f"├─#{latest_hash[:7]} ({latest_version})</a>\n"
+    result += f"#{latest_hash[:7]} ({latest_version})</a>\n"
     result += f"├─<b>Prefix:</b> <code>{prefix}</code>\n"
     result += f"├─<b>Modules:</b> <code>{modules_help.modules_count}</code>\n"
     result += f"└─<b>Commands:</b> <code>{modules_help.commands_count}</code>\n\n"
