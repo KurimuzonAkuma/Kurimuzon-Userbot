@@ -1,9 +1,10 @@
 import asyncio
 import html
 import tempfile
-from contextlib import redirect_stdout
-from io import StringIO
+from contextlib import redirect_stderr, redirect_stdout
+from io import BytesIO, StringIO
 from time import perf_counter
+from traceback import print_exc
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -77,9 +78,18 @@ async def interpreter_task(client: Client, message: Message):
         else:
             await message.edit(text)
     except Exception as ex:
-        return await message.edit(
-            result_header + "<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n"
-            f"<code>{format_exc(ex)}</code>",
+        err = StringIO()
+        with redirect_stderr(err):
+            print_exc()
+
+        result = "{header}<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n{exc}"
+        await message.edit(
+            result.format(
+                header=result_header,
+                exc=format_exc(
+                    ex, suffix=f"Traceback: {html.escape(await paste_neko(err.getvalue()))}"
+                ),
+            ),
         )
 
 
