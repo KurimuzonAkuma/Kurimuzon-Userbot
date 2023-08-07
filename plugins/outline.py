@@ -17,7 +17,7 @@ from utils.scripts import get_args, get_args_raw, get_full_name
 
 text_template = (
     "<emoji id=5472164874886846699>✨</emoji> Outline конфиг пользователя {0}.\n\n"
-    "<b>Ваш ключ доступа:</b> <code>{1}#Kurimuzon%20VPN</code>\n\n"
+    "<b>Ваш ключ доступа:</b> <code>{1}</code>\n\n"
     "<b><emoji id=5818865088970362886>❕</b></emoji> <b>Инструкция по установке:</b>\n"
     "1. Скачайте и установите на устройство приложение Outline:\n"
     "<a href='https://itunes.apple.com/app/outline-app/id1356177741'>iOS</a> | "
@@ -349,7 +349,7 @@ class CustomOutlineVPN(OutlineVPN):
                 password=key.get("password"),
                 port=key.get("port"),
                 method=key.get("method"),
-                access_url=key.get("accessUrl"),
+                access_url=f"{key.get('accessUrl')}#Kurimuzon%20VPN",
                 used_bytes=0,
                 created_at=int(datetime.datetime.now().timestamp()),
                 updated_at=int(datetime.datetime.now().timestamp()),
@@ -486,6 +486,8 @@ async def ol_add(client: Client, message: Message):
         name = get_full_name(message.chat)
 
     outline_client = CustomOutlineVPN(api_url=token["apiUrl"], cert_sha256=token["certSha256"])
+
+    name = f"{name} ({user_id})"
 
     try:
         key = outline_client.create_key(user_id=user_id, key_name=name)
@@ -680,7 +682,7 @@ async def ol_list(client: Client, message: Message):
             result += f"<code>{key.user_id}</code>"
 
             if key.used_bytes:
-                result += f" <b>📥📤 {format_bytes(key.used_bytes)}</b>"
+                result += f" - <b>📥📤 {format_bytes(key.used_bytes)}</b>"
 
             result += "\n"
 
@@ -720,8 +722,6 @@ async def ol_(client: Client, message: Message):
         ),
         disable_web_page_preview=True,
     )
-
-    db.remove("outline", "users")
 
 
 module = modules_help.add_module("outline", __file__)
