@@ -1,329 +1,170 @@
-import asyncio
-import base64
-import datetime
 import re
-from io import BytesIO
-from typing import List, Tuple, Union
+from typing import List
 
-import aiosqlite
-from apscheduler.triggers.interval import IntervalTrigger
+import aiogram
+from aiocache import Cache
+from aiocache.serializers import PickleSerializer
+from aiogram import Bot
 from pyrogram import Client, filters
-from pyrogram.types import (
-    InputMediaAudio,
-    InputMediaDocument,
-    InputMediaPhoto,
-    InputMediaVideo,
-    Message,
-)
+from pyrogram.types import Message
 
-from utils.config import api_hash, api_id
 from utils.db import db
-from utils.filters import command, reactions_filter
-from utils.misc import modules_help, scheduler, scheduler_jobs
-from utils.scripts import ScheduleJob, get_args_raw, get_full_name
+from utils.filters import command
+from utils.misc import modules_help
+from utils.scripts import get_args_raw, get_entity_url, get_full_name, get_message_link
+
+cache = Cache(Cache.MEMORY, ttl=3600, serializer=PickleSerializer())
+
+reactions = filters.create(lambda _, __, message: bool(message.reactions))
+
+deleted_msg = '🗑 <b>Deleted <a href="{msg_link}">message</a> from <a href="{ent_link}">{ent_name}</a></b>\n{text}'
+edited_msg = '📝 <b><a href="{ent_link}">{ent_name}</a> edited <a href="{msg_link}">message</a>\nOld content:</b> {text}'
 
 
-class Govno:
-    async def init_bot(self):
-        self.bot = Client(
-            name="dmessages_bot",
-            api_id=api_id,
-            api_hash=api_hash,
-            in_memory=True,
-            bot_token=db.get("dmessages", "bot_token"),
-        )
-        await self.bot.start()
-
-    async def init_db(self):
-        self.db = DMDatabase()
-        await self.db.connect()
-        await self.db.create_tables()
+def convert_tags(text: str) -> str:
+    text = re.sub("<spoiler", "<tg-spoiler", text)
+    text = re.sub("<emoji id", "<tg-emoji emoji-id", text)
+    text = re.sub(
+        r'<pre language="([^"]+)">([^<]+)</pre>',
+        r'<pre><code class="language-\1">\2</code></pre>',
+        text,
+    )
+    return text
 
 
-govno = Govno()
-loop = asyncio.get_event_loop()
-loop.create_task(govno.init_bot())
-loop.create_task(govno.init_db())
+async def get_media_group(media_group_id: int, deleted_messages: List[Message]) -> List[Message]:
+    media_group = []
+
+    for dmessage in deleted_messages:
+        cached = await cache.get(dmessage.id)
+        if cached and cached.media_group_id == media_group_id:
+            media_group.append(cached)
+
+    return media_group
 
 
-class DMDatabase:
-    def __init__(self, path: str = "dmessages.db"):
-        self.path = path
-        self.conn = None
-        self.cursor = None
+@Client.on_message(~filters.me & ~filters.bot & filters.private, group=-1000)
+async def dmessages_log_handler(client: Client, message: Message):
+    await cache.set(message.id, message)
 
-    async def connect(self):
-        if self.conn is None:
-            self.conn = await aiosqlite.connect(self.path)
-            self.cursor = await self.conn.cursor()
-            self.cursor.row_factory = aiosqlite.Row
 
-        return self.conn
+@Client.on_edited_message(~filters.me & filters.private & ~reactions, group=-1000)
+async def dmessages_edited_handler(client: Client, message: Message):
+    if not db.get("dmessages", "enabled"):
+        return
+    if not db.get("dmessages", "bot_token"):
+        return
 
-    async def close(self):
-        if self.conn is None:
-            return
+    cached_message: Message = await cache.get(message.id)
 
-        await self.cursor.close()
-        await self.conn.close()
-        self.conn = None
-        self.cursor = None
+    if not cached_message:
+        return
 
-    async def execute(self, query: str, values: tuple = None, commit: bool = True) -> Tuple[dict]:
-        await self.cursor.execute(query, values)
+    bot = Bot(db.get("dmessages", "bot_token"), parse_mode="HTML")
 
-        if commit:
-            await self.conn.commit()
-
-        return await self.cursor.fetchall()
-
-    async def create_tables(self):
-        await self.cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS dmessages (
-                message_id INTEGER NOT NULL PRIMARY KEY,
-                chat_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                username TEXT,
-                type TEXT NOT NULL,
-                text TEXT,
-                media TEXT,
-                media_group_id INTEGER,
-                media_name TEXT,
-                date REAL NOT NULL
-            )
-            """
-        )
-
-    async def delete_messages(self, message_ids: Union[int, List[int]]):
-        if isinstance(message_ids, int):
-            message_ids = [message_ids]
-
-        await self.execute(
-            f"DELETE FROM dmessages WHERE message_id IN ({', '.join('?' * len(message_ids))})",
-            tuple(message_ids),
-        )
-        await self.vacuum()
-
-    async def vacuum(self):
-        await self.execute("VACUUM;")
-
-    async def delete_old_messages(self, days: int = 1):
-        await self.execute(
-            "DELETE FROM dmessages WHERE date < ?;",
-            (int(datetime.datetime.now().timestamp()) - 86400 * days,),
-        )
-        await self.vacuum()
-
-    async def update_text_message(self, message: Message):
-        user_fullname = get_full_name(message.from_user)
-
-        await self.execute(
-            """
-            UPDATE dmessages SET
-                name = ?,
-                username = ?,
-                text = ?,
-                date = ?
-            WHERE message_id = ?
-            """,
-            (
-                user_fullname,
-                message.chat.username,
-                message.text.html,
-                message.date.timestamp(),
-                message.id,
+    if cached_message.media:
+        pass
+    else:
+        await bot.send_message(
+            chat_id=client.me.id,
+            text=edited_msg.format(
+                ent_link=get_entity_url(message.from_user),
+                ent_name=get_full_name(message.from_user),
+                msg_link=get_message_link(message),
+                text=convert_tags(cached_message.text.html),
             ),
         )
 
-    async def save_text_message(self, message: Message):
-        user_fullname = get_full_name(message.from_user)
-        await self.execute(
-            """
-            INSERT INTO dmessages (
-                chat_id,
-                message_id,
-                name,
-                username,
-                type,
-                text,
-                date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                message.chat.id,
-                message.id,
-                user_fullname,
-                message.chat.username,
-                "text",
-                message.text.html,
-                message.date.timestamp(),
-            ),
-        )
-
-    async def save_media_message(self, message: Message):
-        user_fullname = get_full_name(message.from_user)
-        media = await message.download(in_memory=True)
-
-        await self.execute(
-            """
-            INSERT INTO dmessages (
-                chat_id,
-                message_id,
-                name,
-                username,
-                type,
-                text,
-                media,
-                media_group_id,
-                media_name,
-                date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                message.chat.id,
-                message.id,
-                user_fullname,
-                message.chat.username,
-                message.media.value,
-                message.caption.html if message.caption else "",
-                base64.b64encode(bytes(media.getbuffer())).decode(),
-                message.media_group_id,
-                media.name,
-                message.date.timestamp(),
-            ),
-        )
-
-    async def get_messages(
-        self, message_ids: Union[List[int], int], limit: int = 5
-    ) -> Union[List[dict], None]:
-        if isinstance(message_ids, int):
-            message_ids = [message_ids]
-
-        return await self.execute(
-            f"SELECT * FROM dmessages WHERE message_id IN ({', '.join('?' * len(message_ids))}) ORDER BY date DESC LIMIT ?",
-            tuple(message_ids) + (limit,),
-        )
-
-    async def get_media_group(self, media_group_id: int) -> Union[List[dict], None]:
-        return await self.execute(
-            "SELECT * FROM dmessages WHERE media_group_id = ? ORDER BY date DESC",
-            (media_group_id,),
-        )
-
-
-@Client.on_message(~filters.me & ~filters.bot & filters.private & filters.text, group=1000)
-async def dmessages_text_handler(client: Client, message: Message):
-    if not db.get("dmessages", "enabled", False):
-        return
-
-    await govno.db.save_text_message(message)
-
-
-@Client.on_message(~filters.me & ~filters.bot & filters.private & filters.media, group=1000)
-async def dmessages_media_handler(client: Client, message: Message):
-    if not db.get("dmessages", "enabled", False):
-        return
-
-    await govno.db.save_media_message(message)
-
-
-@Client.on_edited_message(~filters.me & filters.private & ~reactions_filter, group=1000)
-async def dmessages_on_edited_handler(client: Client, message: Message):
-    if not db.get("dmessages", "enabled", False):
-        return
-
-    old_messages = await govno.db.get_messages(message.id)
-
-    if not old_messages:
-        return
-
-    for old_message in old_messages:
-        if old_message["type"] == "text":
-            if len(old_message["text"]) > 2000:
-                await govno.bot.send_message(
-                    client.me.id,
-                    f"<b>Edited message from {old_message['name']}</b>\n{old_message['text']}",
-                )
-                await govno.bot.send_message(
-                    client.me.id,
-                    message.text.html,
-                )
-            else:
-                await govno.bot.send_message(
-                    client.me.id,
-                    f"<b>Edited message from {old_message['name']}</b>\n"
-                    f"{old_message['text']}\n->\n{message.text.html}",
-                )
-
-            await govno.db.update_text_message(message)
+    await cache.set(message.id, message)
+    await bot.session.close()
 
 
 @Client.on_deleted_messages(group=1000)
 async def dmessages_on_deleted_handler(client: Client, messages: List[Message]):
-    if not db.get("dmessages", "enabled", False):
+    if not db.get("dmessages", "enabled"):
+        return
+    if not db.get("dmessages", "bot_token"):
         return
 
-    max_to_show = db.get("dmessages", "max_to_show", 5)
+    cached_messages: List[Message] = [await cache.get(message.id) for message in messages][
+        : db.get("dmessages", "max_to_show", 10)
+    ]
+    cached_messages = list(filter(None, cached_messages))
 
-    deleted_messages = await govno.db.get_messages(
-        message_ids=[message.id for message in messages], limit=max_to_show
-    )
-
-    if not deleted_messages:
+    if not cached_messages:
         return
 
+    bot = Bot(db.get("dmessages", "bot_token"), parse_mode="HTML")
     processed_media_groups_ids = []
 
-    for deleted_message in deleted_messages:
-        if deleted_message["type"] == "text":
-            await govno.bot.send_message(
-                client.me.id,
-                f"<b>Deleted message from {deleted_message['name']}</b>\n{deleted_message['text']}",
+    media_types = {
+        "audio": aiogram.types.InputMediaAudio,
+    }
+
+    for cached_message in cached_messages:
+        if cached_message.text:
+            await bot.send_message(
+                chat_id=client.me.id,
+                text=deleted_msg.format(
+                    msg_link=get_message_link(cached_message),
+                    ent_link=get_entity_url(cached_message.from_user),
+                    ent_name=get_full_name(cached_message.from_user),
+                    text=convert_tags(cached_message.text.html),
+                ),
             )
-
-        # media group can only be photo/video or document/audio
-        elif deleted_message["type"] in ["photo", "video", "document", "audio"]:
-            if deleted_message["media_group_id"]:
-                if deleted_message["media_group_id"] in processed_media_groups_ids:
+        elif cached_message.media:
+            if cached_message.media_group_id:
+                if cached_message.media_group_id in processed_media_groups_ids:
                     continue
-                processed_media_groups_ids.append(deleted_message["media_group_id"])
-
-                media_group = await govno.db.get_media_group(deleted_message["media_group_id"])
+                processed_media_groups_ids.append(cached_message.media_group_id)
                 input_media_group = []
 
+                media_group = await get_media_group(cached_message.media_group_id, cached_messages)
+
+                is_first = True
                 for media in media_group:
-                    data = BytesIO(base64.b64decode(media["media"]))
-                    caption = (
-                        f"<b>Deleted message from {deleted_message['name']}</b>\n{media['text']}"
-                    )
-                    if media["type"] == "photo":
-                        input_media_group.append(InputMediaPhoto(data, caption))
-                    elif media["type"] == "video":
-                        input_media_group.append(InputMediaVideo(data, caption))
-                    elif media["type"] == "document":
-                        input_media_group.append(InputMediaDocument(data, caption))
-                    elif media["type"] == "audio":
-                        input_media_group.append(InputMediaAudio(data, caption))
-                    else:
+                    mtype = media_types.get(media.media.value, aiogram.types.InputMediaDocument)
+                    if not mtype:
                         continue
 
-                if input_media_group:
-                    await govno.bot.send_media_group(client.me.id, media=input_media_group)
+                    file_id = getattr(media, media.media.value).file_id
+                    file = await client.download_media(file_id, in_memory=True)
+                    input_media_group.append(
+                        mtype(
+                            media=aiogram.types.BufferedInputFile(file.getbuffer(), file.name),
+                            caption=deleted_msg.format(
+                                msg_link=get_message_link(media),
+                                ent_link=get_entity_url(media.from_user),
+                                ent_name=get_full_name(media.from_user),
+                                text=convert_tags(media.caption.html) if media.caption else "",
+                            )
+                            if is_first
+                            else "",
+                        )
+                    )
+                    is_first = False
+
+                await bot.send_media_group(chat_id=client.me.id, media=input_media_group)
             else:
-                await govno.bot.send_document(
-                    client.me.id,
-                    BytesIO(base64.b64decode(deleted_message["media"])),
-                    caption=f"<b>Deleted message from {deleted_message['name']}</b>\n{deleted_message['text']}",
-                    file_name=deleted_message["media_name"],
+                file_id = getattr(cached_message, cached_message.media.value).file_id
+                file = await client.download_media(file_id, in_memory=True)
+                await bot.send_document(
+                    chat_id=client.me.id,
+                    document=aiogram.types.BufferedInputFile(file.getbuffer(), file.name),
+                    caption=deleted_msg.format(
+                        msg_link=get_message_link(cached_message),
+                        ent_link=get_entity_url(cached_message.from_user),
+                        ent_name=get_full_name(cached_message.from_user),
+                        text=convert_tags(cached_message.caption.html)
+                        if cached_message.caption
+                        else "",
+                    ),
                 )
+        await cache.delete(cached_message.id)
+    await bot.session.close()
 
-    await govno.db.delete_messages([message["message_id"] for message in deleted_messages])
 
-
-@Client.on_message(
-    command(["dmessages", "dm"]) & filters.me & ~filters.forwarded & ~filters.scheduled
-)
+@Client.on_message(command(["delm"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
 async def dmessages_state_handler(client: Client, message: Message):
     args = get_args_raw(message)
 
@@ -337,9 +178,6 @@ async def dmessages_state_handler(client: Client, message: Message):
         )
 
     if args.lower() in ("on", "1", "true"):
-        job = scheduler.get_job("dmessages_job")
-        if job:
-            job.resume()
         db.set("dmessages", "enabled", True)
         return await message.edit_text(
             "<emoji id=5260726538302660868>✅</emoji><b> Deleted messages enabled</b>"
@@ -351,12 +189,7 @@ async def dmessages_state_handler(client: Client, message: Message):
         )
 
 
-@Client.on_message(
-    command(["dmessages_set_token", "dm_st"])
-    & filters.me
-    & ~filters.forwarded
-    & ~filters.scheduled
-)
+@Client.on_message(command(["delm_st"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
 async def dmessages_st_handler(client: Client, message: Message):
     args = get_args_raw(message)
 
@@ -367,26 +200,13 @@ async def dmessages_st_handler(client: Client, message: Message):
         )
 
     db.set("dmessages", "bot_token", token[0])
+    db.set("dmessages", "enabled", True)
     await message.edit_text(
         "<emoji id=5260726538302660868>✅</emoji><b> Bot token succesfully set!</b>"
     )
 
-    if isinstance(bot, Client):
-        if govno.bot.is_connected:
-            await govno.bot.stop()
-        govno.bot = Client(
-            name="dmessages_bot",
-            api_id=api_id,
-            api_hash=api_hash,
-            in_memory=True,
-            bot_token=token[0],
-        )
-        await govno.bot.start()
 
-
-@Client.on_message(
-    command(["dmessages_max", "dm_max"]) & filters.me & ~filters.forwarded & ~filters.scheduled
-)
+@Client.on_message(command(["delm_max"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
 async def dmessages_max_handler(client: Client, message: Message):
     args = get_args_raw(message)
     if not args or not args.isdigit():
@@ -400,21 +220,7 @@ async def dmessages_max_handler(client: Client, message: Message):
     )
 
 
-# First argument always should be client. Because it will be passed automatically in main.py
-async def dmessages_job(client: Client):
-    if not db.get("dmessages", "enabled", False):
-        job = scheduler.get_job("dmessages_job")
-        if job:
-            job.pause()
-        return
-
-    # Delete messages older than 1 day
-    await govno.db.delete_old_messages(days=1)
-
-
-scheduler_jobs.append(ScheduleJob(dmessages_job, IntervalTrigger(hours=1)))
-
-module = modules_help.add_module("dmessages", __file__)
-module.add_command("dmessages", "Enable/disable deleted messages", "[on/off]")
-module.add_command("dmessages_max", "Set max number of deleted messages to show", "[number]")
-module.add_command("dmessages_set_token", "Set bot token")
+module = modules_help.add_module("delm", __file__)
+module.add_command("delm", "Enable/disable deleted messages", "[on/off]")
+module.add_command("delm_max", "Set max number of deleted messages to show", "[number]")
+module.add_command("delm_st", "Set bot token")

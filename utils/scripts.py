@@ -1,15 +1,18 @@
+import asyncio
 import logging
 import os
 import shlex
 import sys
-import typing
+from typing import Dict, List, Optional, Tuple, Union
 
 import aiohttp
 import arrow
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from pyrogram import Client, errors
+from pyrogram import Client, enums, errors
 from pyrogram.enums import ChatType
+from pyrogram.session import Session
+from pyrogram.storage import Storage
 from pyrogram.types import Chat, Message, User
 
 from utils.db import db
@@ -50,7 +53,7 @@ def restart():
     os.execvp(sys.executable, [sys.executable, *sys.argv])
 
 
-def get_full_name(obj: typing.Union[User, Chat]) -> str:
+def get_full_name(obj: Union[User, Chat]) -> str:
     if isinstance(obj, Chat):
         if obj.type == ChatType.PRIVATE:
             return f"{obj.first_name} {obj.last_name}" if obj.last_name else obj.first_name
@@ -123,11 +126,11 @@ def get_prefix():
     return db.get("core.main", "prefix", default=".")
 
 
-def get_args_raw(message: typing.Union[Message, str], use_reply: bool = None) -> str:
+def get_args_raw(message: Union[Message, str], use_reply: bool = None) -> str:
     """Returns text after command.
 
     Args:
-        message (typing.Union[Message, str]): Message or text.
+        message (Union[Message, str]): Message or text.
 
         use_reply (bool, optional): Try to get args from reply message if no args in message. Defaults to None.
 
@@ -148,17 +151,17 @@ def get_args_raw(message: typing.Union[Message, str], use_reply: bool = None) ->
 
 
 def get_args(
-    message: typing.Union[Message, str], use_reply: bool = None
-) -> typing.Tuple[typing.List[str], typing.Dict[str, str]]:
+    message: Union[Message, str], use_reply: bool = None
+) -> Tuple[List[str], Dict[str, str]]:
     """Returns list of common args and a dictionary with named args.
 
     Args:
-        message (typing.Union[Message, str]): Message or text.
+        message (Union[Message, str]): Message or text.
 
         use_reply (bool, optional): Try to get args from reply message if no args in message. Defaults to None.
 
     Returns:
-        typing.List[str]: List of args.
+        List[str]: List of args.
     """
     raw_args = get_args_raw(message, use_reply)
 
@@ -189,9 +192,7 @@ class ScheduleJob:
     def __init__(
         self,
         func: callable,
-        trigger: typing.Optional[typing.Union[CronTrigger, IntervalTrigger]] = IntervalTrigger(
-            seconds=3600
-        ),
+        trigger: Optional[Union[CronTrigger, IntervalTrigger]] = IntervalTrigger(seconds=3600),
         *args,
         **kwargs,
     ):
@@ -232,7 +233,7 @@ def get_cpu_usage() -> float:
         return 0
 
 
-def humanize_seconds(seconds: typing.Union[int, float]) -> str:
+def humanize_seconds(seconds: Union[int, float]) -> str:
     """Returns humanized time delta from seconds"""
     current_time = arrow.get()
     target_time = current_time.shift(seconds=-seconds)
@@ -243,9 +244,9 @@ class Command:
     def __init__(
         self,
         name: str,
-        description: typing.Optional[str] = None,
-        args: typing.Optional[str] = None,
-        aliases: typing.Optional[typing.List[str]] = None,
+        description: Optional[str] = None,
+        args: Optional[str] = None,
+        aliases: Optional[List[str]] = None,
     ):
         self.name = name
         self.description = description
@@ -264,9 +265,9 @@ class Module:
     def add_command(
         self,
         command: str,
-        description: typing.Optional[str] = None,
-        args: typing.Optional[str] = None,
-        aliases: typing.Optional[typing.List[str]] = None,
+        description: Optional[str] = None,
+        args: Optional[str] = None,
+        aliases: Optional[List[str]] = None,
     ) -> Command:
         if command in self.commands:
             raise ValueError(f"Command {command} already exists")
@@ -331,7 +332,7 @@ class ModuleHelp:
 
         raise ValueError(f"Module with path {path} not found")
 
-    def help(self) -> typing.List[str]:
+    def help(self) -> List[str]:
         prefix = get_prefix()
         result = []
 
@@ -412,3 +413,241 @@ class ModuleHelp:
     @property
     def commands_count(self) -> int:
         return sum(len(module.commands) for module in self.modules.values())
+
+
+def get_entity_url(
+    entity: Union[User, Chat],
+    openmessage: bool = False,
+) -> str:
+    """
+    Get link to object, if available
+    :param entity: Entity to get url of
+    :param openmessage: Use tg://openmessage link for users
+    :return: Link to object or empty string
+    """
+    return (
+        (f"tg://openmessage?id={entity.id}" if openmessage else f"tg://user?id={entity.id}")
+        if isinstance(entity, User)
+        else (
+            f"tg://resolve?domain={entity.username}" if getattr(entity, "username", None) else ""
+        )
+    )
+
+
+def get_message_link(
+    message: Message,
+    chat: Optional[Chat] = None,
+) -> str:
+    """
+    Get link to message
+    :param message: Message to get link of
+    :param chat: Chat, where message was sent
+    :return: Link to message
+    """
+    if message.chat.type == ChatType.PRIVATE:
+        return f"tg://openmessage?user_id={message.chat.id}&message_id={message.id}"
+
+    return (
+        f"https://t.me/{chat.username}/{message.id}"
+        if getattr(chat, "username", False)
+        else f"https://t.me/c/{chat.id}/{message.id}"
+    )
+
+
+async def shell_exec(
+    command: str,
+    stdout=asyncio.subprocess.PIPE,
+    stderr=asyncio.subprocess.PIPE,
+    executable: Optional[str] = None,
+) -> Tuple[int, str, str]:
+    """Executes shell command and returns tuple with return code, decoded stdout and stderr"""
+    process = await asyncio.create_subprocess_shell(
+        cmd=command, stdout=stdout, stderr=stderr, shell=True, executable=executable
+    )
+
+    stdout, stderr = await process.communicate()
+    return process.returncode, stdout.decode(), stderr.decode()
+
+
+class KClient(Client):
+    """Modified Pyrogram Client, the main means for interacting with Telegram.
+
+    Parameters:
+        name (``str``):
+            A name for the client, e.g.: "my_account".
+
+        api_id (``int`` | ``str``, *optional*):
+            The *api_id* part of the Telegram API key, as integer or string.
+            E.g.: 12345 or "12345".
+
+        api_hash (``str``, *optional*):
+            The *api_hash* part of the Telegram API key, as string.
+            E.g.: "0123456789abcdef0123456789abcdef".
+
+        app_version (``str``, *optional*):
+            Application version.
+            Defaults to "Pyrogram x.y.z".
+
+        device_model (``str``, *optional*):
+            Device model.
+            Defaults to *platform.python_implementation() + " " + platform.python_version()*.
+
+        system_version (``str``, *optional*):
+            Operating System version.
+            Defaults to *platform.system() + " " + platform.release()*.
+
+        lang_code (``str``, *optional*):
+            Code of the language used on the client, in ISO 639-1 standard.
+            Defaults to "en".
+
+        ipv6 (``bool``, *optional*):
+            Pass True to connect to Telegram using IPv6.
+            Defaults to False (IPv4).
+
+        proxy (``dict``, *optional*):
+            The Proxy settings as dict.
+            E.g.: *dict(scheme="socks5", hostname="11.22.33.44", port=1234, username="user", password="pass")*.
+            The *username* and *password* can be omitted if the proxy doesn't require authorization.
+
+        test_mode (``bool``, *optional*):
+            Enable or disable login to the test servers.
+            Only applicable for new sessions and will be ignored in case previously created sessions are loaded.
+            Defaults to False.
+
+        bot_token (``str``, *optional*):
+            Pass the Bot API token to create a bot session, e.g.: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+            Only applicable for new sessions.
+
+        session_string (``str``, *optional*):
+            Pass a session string to load the session in-memory.
+            Implies ``in_memory=True``.
+
+        storage (:obj:`~pyrogram.storage.Storage`, *optional*):
+            Pass an instance of your own implementation of session storage engine.
+            Useful when you want to store your session in databases like Mongo, Redis, etc.
+
+        in_memory (``bool``, *optional*):
+            Pass True to start an in-memory session that will be discarded as soon as the client stops.
+            In order to reconnect again using an in-memory session without having to login again, you can use
+            :meth:`~pyrogram.Client.export_session_string` before stopping the client to get a session string you can
+            pass to the ``session_string`` parameter.
+            Defaults to False.
+
+        phone_number (``str``, *optional*):
+            Pass the phone number as string (with the Country Code prefix included) to avoid entering it manually.
+            Only applicable for new sessions.
+
+        phone_code (``str``, *optional*):
+            Pass the phone code as string (for test numbers only) to avoid entering it manually.
+            Only applicable for new sessions.
+
+        password (``str``, *optional*):
+            Pass the Two-Step Verification password as string (if required) to avoid entering it manually.
+            Only applicable for new sessions.
+
+        workers (``int``, *optional*):
+            Number of maximum concurrent workers for handling incoming updates.
+            Defaults to ``min(32, os.cpu_count() + 4)``.
+
+        workdir (``str``, *optional*):
+            Define a custom working directory.
+            The working directory is the location in the filesystem where Pyrogram will store the session files.
+            Defaults to the parent directory of the main script.
+
+        plugins (``dict``, *optional*):
+            Smart Plugins settings as dict, e.g.: *dict(root="plugins")*.
+
+        parse_mode (:obj:`~pyrogram.enums.ParseMode`, *optional*):
+            Set the global parse mode of the client. By default, texts are parsed using both Markdown and HTML styles.
+            You can combine both syntaxes together.
+
+        no_updates (``bool``, *optional*):
+            Pass True to disable incoming updates.
+            When updates are disabled the client can't receive messages or other updates.
+            Useful for batch programs that don't need to deal with updates.
+            Defaults to False (updates enabled and received).
+
+        takeout (``bool``, *optional*):
+            Pass True to let the client use a takeout session instead of a normal one, implies *no_updates=True*.
+            Useful for exporting Telegram data. Methods invoked inside a takeout session (such as get_chat_history,
+            download_media, ...) are less prone to throw FloodWait exceptions.
+            Only available for users, bots will ignore this parameter.
+            Defaults to False (normal session).
+
+        sleep_threshold (``int``, *optional*):
+            Set a sleep threshold for flood wait exceptions happening globally in this client instance, below which any
+            request that raises a flood wait will be automatically invoked again after sleeping for the required amount
+            of time. Flood wait exceptions requiring higher waiting times will be raised.
+            Defaults to 10 seconds.
+
+        hide_password (``bool``, *optional*):
+            Pass True to hide the password when typing it during the login.
+            Defaults to False, because ``getpass`` (the library used) is known to be problematic in some
+            terminal environments.
+
+        max_concurrent_transmissions (``bool``, *optional*):
+            Set the maximum amount of concurrent transmissions (uploads & downloads).
+            A value that is too high may result in network related issues.
+            Defaults to 1.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        api_id: Union[int, str] = None,
+        api_hash: str = None,
+        app_version: str = Client.APP_VERSION,
+        device_model: str = Client.DEVICE_MODEL,
+        system_version: str = Client.SYSTEM_VERSION,
+        lang_code: str = Client.LANG_CODE,
+        ipv6: bool = False,
+        proxy: dict = None,
+        test_mode: bool = False,
+        bot_token: str = None,
+        session_string: str = None,
+        storage: Storage = None,
+        in_memory: bool = None,
+        phone_number: str = None,
+        phone_code: str = None,
+        password: str = None,
+        workers: int = Client.WORKERS,
+        workdir: str = Client.WORKDIR,
+        plugins: dict = None,
+        parse_mode: "enums.ParseMode" = enums.ParseMode.DEFAULT,
+        no_updates: bool = None,
+        takeout: bool = None,
+        sleep_threshold: int = Session.SLEEP_THRESHOLD,
+        hide_password: bool = False,
+        max_concurrent_transmissions: int = Client.MAX_CONCURRENT_TRANSMISSIONS,
+        huy: str = "huy",
+    ):
+        super().__init__(
+            name=name,
+            api_id=api_id,
+            api_hash=api_hash,
+            app_version=app_version,
+            device_model=device_model,
+            system_version=system_version,
+            lang_code=lang_code,
+            ipv6=ipv6,
+            proxy=proxy,
+            test_mode=test_mode,
+            bot_token=bot_token,
+            session_string=session_string,
+            storage=storage,
+            in_memory=in_memory,
+            phone_number=phone_number,
+            phone_code=phone_code,
+            password=password,
+            workers=workers,
+            workdir=workdir,
+            plugins=plugins,
+            parse_mode=parse_mode,
+            no_updates=no_updates,
+            takeout=takeout,
+            sleep_threshold=sleep_threshold,
+            hide_password=hide_password,
+            max_concurrent_transmissions=max_concurrent_transmissions,
+        )
+
+        self._db = ""

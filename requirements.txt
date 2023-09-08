@@ -1,3 +1,5 @@
+aiocache
+aiogram
 aiohttp
 aiosqlite
 apscheduler
