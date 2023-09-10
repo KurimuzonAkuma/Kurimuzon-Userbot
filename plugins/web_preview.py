@@ -1,3 +1,5 @@
+import html
+
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
@@ -16,7 +18,9 @@ async def web_preview(_, message: Message):
     if message.command[0] == "wpr" and message.reply_to_message:
         args = message.reply_to_message.text or message.reply_to_message.caption
 
-    await message.reply_photo(photo=f"https://mini.s-shot.ru/1024x768/JPEG/1024/Z100/?{args}")
+    await message.reply_photo(
+        photo=f"https://mini.s-shot.ru/1920x1080/JPEG/1920/Z100/?{html.escape(args)}"
+    )
 
 
 module = modules_help.add_module("web_preview", __file__)
