@@ -62,24 +62,34 @@ async def dmessages_edited_handler(client: Client, message: Message):
 
     bot = Bot(db.get("dmessages", "bot_token"), parse_mode="HTML")
 
+    text = cached_message.text or cached_message.caption
+    text = edited_msg.format(
+        ent_link=get_entity_url(message.from_user, True),
+        ent_name=get_full_name(message.from_user),
+        msg_link=get_message_link(message),
+        text=convert_tags(text.html) if text else "",
+    )
+
     if cached_message.media:
-        pass
+        file_id = getattr(cached_message, cached_message.media.value).file_id
+        file = await client.download_media(file_id, in_memory=True)
+
+        await bot.send_document(
+            chat_id=client.me.id,
+            document=aiogram.types.BufferedInputFile(file.getbuffer(), file.name),
+            caption=text,
+        )
     else:
         await bot.send_message(
             chat_id=client.me.id,
-            text=edited_msg.format(
-                ent_link=get_entity_url(message.from_user),
-                ent_name=get_full_name(message.from_user),
-                msg_link=get_message_link(message),
-                text=convert_tags(cached_message.text.html),
-            ),
+            text=text,
         )
 
     await cache.set(message.id, message)
     await bot.session.close()
 
 
-@Client.on_deleted_messages(group=1000)
+@Client.on_deleted_messages(group=-1000)
 async def dmessages_on_deleted_handler(client: Client, messages: List[Message]):
     if not db.get("dmessages", "enabled"):
         return
@@ -98,21 +108,21 @@ async def dmessages_on_deleted_handler(client: Client, messages: List[Message]):
     processed_media_groups_ids = []
 
     media_types = {
+        "photo": aiogram.types.InputMediaPhoto,
+        "video": aiogram.types.InputMediaVideo,
         "audio": aiogram.types.InputMediaAudio,
     }
 
     for cached_message in cached_messages:
-        if cached_message.text:
-            await bot.send_message(
-                chat_id=client.me.id,
-                text=deleted_msg.format(
-                    msg_link=get_message_link(cached_message),
-                    ent_link=get_entity_url(cached_message.from_user),
-                    ent_name=get_full_name(cached_message.from_user),
-                    text=convert_tags(cached_message.text.html),
-                ),
-            )
-        elif cached_message.media:
+        text = cached_message.text or cached_message.caption
+        text = deleted_msg.format(
+            msg_link=get_message_link(cached_message),
+            ent_link=get_entity_url(cached_message.from_user, True),
+            ent_name=get_full_name(cached_message.from_user),
+            text=convert_tags(text.html) if text else "",
+        )
+
+        if cached_message.media:
             if cached_message.media_group_id:
                 if cached_message.media_group_id in processed_media_groups_ids:
                     continue
@@ -124,22 +134,13 @@ async def dmessages_on_deleted_handler(client: Client, messages: List[Message]):
                 is_first = True
                 for media in media_group:
                     mtype = media_types.get(media.media.value, aiogram.types.InputMediaDocument)
-                    if not mtype:
-                        continue
 
                     file_id = getattr(media, media.media.value).file_id
                     file = await client.download_media(file_id, in_memory=True)
                     input_media_group.append(
                         mtype(
                             media=aiogram.types.BufferedInputFile(file.getbuffer(), file.name),
-                            caption=deleted_msg.format(
-                                msg_link=get_message_link(media),
-                                ent_link=get_entity_url(media.from_user),
-                                ent_name=get_full_name(media.from_user),
-                                text=convert_tags(media.caption.html) if media.caption else "",
-                            )
-                            if is_first
-                            else "",
+                            caption=text if is_first else "",
                         )
                     )
                     is_first = False
@@ -148,18 +149,30 @@ async def dmessages_on_deleted_handler(client: Client, messages: List[Message]):
             else:
                 file_id = getattr(cached_message, cached_message.media.value).file_id
                 file = await client.download_media(file_id, in_memory=True)
-                await bot.send_document(
-                    chat_id=client.me.id,
-                    document=aiogram.types.BufferedInputFile(file.getbuffer(), file.name),
-                    caption=deleted_msg.format(
-                        msg_link=get_message_link(cached_message),
-                        ent_link=get_entity_url(cached_message.from_user),
-                        ent_name=get_full_name(cached_message.from_user),
-                        text=convert_tags(cached_message.caption.html)
-                        if cached_message.caption
-                        else "",
-                    ),
-                )
+
+                if cached_message.sticker:
+                    await bot.send_message(chat_id=client.me.id, text=text)
+                    await bot.send_sticker(
+                        chat_id=client.me.id,
+                        sticker=file_id,
+                    )
+                elif cached_message.video_note:
+                    await bot.send_message(chat_id=client.me.id, text=text)
+                    await bot.send_video_note(
+                        chat_id=client.me.id,
+                        video_note=aiogram.types.BufferedInputFile(file.getbuffer(), file.name),
+                    )
+                else:
+                    await bot.send_document(
+                        chat_id=client.me.id,
+                        document=aiogram.types.BufferedInputFile(file.getbuffer(), file.name),
+                        caption=text,
+                    )
+        else:
+            await bot.send_message(
+                chat_id=client.me.id,
+                text=text,
+            )
         await cache.delete(cached_message.id)
     await bot.session.close()
 
