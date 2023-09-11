@@ -426,7 +426,7 @@ def get_entity_url(
     :return: Link to object or empty string
     """
     return (
-        (f"tg://openmessage?id={entity.id}" if openmessage else f"tg://user?id={entity.id}")
+        (f"tg://openmessage?user_id={entity.id}" if openmessage else f"tg://user?id={entity.id}")
         if isinstance(entity, User)
         else (
             f"tg://resolve?domain={entity.username}" if getattr(entity, "username", None) else ""
@@ -456,16 +456,22 @@ def get_message_link(
 
 async def shell_exec(
     command: str,
+    executable: Optional[str] = None,
+    timeout: Optional[Union[int, float]] = None,
     stdout=asyncio.subprocess.PIPE,
     stderr=asyncio.subprocess.PIPE,
-    executable: Optional[str] = None,
 ) -> Tuple[int, str, str]:
     """Executes shell command and returns tuple with return code, decoded stdout and stderr"""
     process = await asyncio.create_subprocess_shell(
         cmd=command, stdout=stdout, stderr=stderr, shell=True, executable=executable
     )
 
-    stdout, stderr = await process.communicate()
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout)
+    except asyncio.exceptions.TimeoutError as e:
+        process.kill()
+        raise e
+
     return process.returncode, stdout.decode(), stderr.decode()
 
 
