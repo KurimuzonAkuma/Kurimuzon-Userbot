@@ -18,7 +18,7 @@ cache = Cache(Cache.MEMORY, ttl=3600, serializer=PickleSerializer())
 reactions = filters.create(lambda _, __, message: bool(message.reactions))
 
 deleted_msg = '🗑 <b>Deleted <a href="{msg_link}">message</a> from <a href="{ent_link}">{ent_name}</a></b>\n{text}'
-edited_msg = '📝 <b><a href="{ent_link}">{ent_name}</a> edited <a href="{msg_link}">message</a>\nOld content:</b> {text}'
+edited_msg = '📝 <b><a href="{ent_link}">{ent_name}</a> edited <a href="{msg_link}">message</a></b>\n{edit_text}\n<code>Original message</code>\n{orig_text}'
 
 
 def convert_tags(text: str) -> str:
@@ -62,12 +62,14 @@ async def dmessages_edited_handler(client: Client, message: Message):
 
     bot = Bot(db.get("dmessages", "bot_token"), parse_mode="HTML")
 
+    edit_text = message.text or message.caption
     text = cached_message.text or cached_message.caption
     text = edited_msg.format(
         ent_link=get_entity_url(message.from_user, True),
         ent_name=get_full_name(message.from_user),
         msg_link=get_message_link(message),
-        text=convert_tags(text.html) if text else "",
+        edit_text=convert_tags(edit_text.html) if edit_text else "",
+        orig_text=convert_tags(text.html) if text else "",
     )
 
     if cached_message.media:
