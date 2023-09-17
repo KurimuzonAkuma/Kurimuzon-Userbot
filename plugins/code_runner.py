@@ -84,7 +84,7 @@ async def python_exec(client: Client, message: Message):
                 result="<b><emoji id=5465665476971471368>❌</emoji> Timeout Error!</b>",
             )
         )
-    except Exception:
+    except Exception as e:
         err = StringIO()
         with redirect_stderr(err):
             print_exc()
@@ -94,7 +94,7 @@ async def python_exec(client: Client, message: Message):
                 language="Python",
                 pre_language="python",
                 code=code,
-                result="<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n"
+                result=f"<b><emoji id=5465665476971471368>❌</emoji> {e.__class__.__name__}: {e}</b>\n"
                 f"Traceback: {html.escape(await paste_neko(err.getvalue()))}",
             )
         )
