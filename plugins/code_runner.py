@@ -173,7 +173,7 @@ async def gcc_exec(_: Client, message: Message):
                     code=code,
                     result=f"<b><emoji id=5472164874886846699>✨</emoji> Result</b>:\n"
                     f"{result}\n"
-                    f"<b>Compiled in {round(comp_stop_time - comp_start_time, 5)}s.</b>"
+                    f"<b>Compiled in {round(comp_stop_time - comp_start_time, 5)}s.</b>\n"
                     f"<b>Completed in {round(exec_stop_time - exec_start_time, 5)}s.</b>",
                 )
             )
@@ -252,7 +252,7 @@ async def gpp_exec(_: Client, message: Message):
                     code=code,
                     result=f"<b><emoji id=5472164874886846699>✨</emoji> Result</b>:\n"
                     f"{result}\n"
-                    f"<b>Compiled in {round(comp_stop_time - comp_start_time, 5)}s.</b>"
+                    f"<b>Compiled in {round(comp_stop_time - comp_start_time, 5)}s.</b>\n"
                     f"<b>Completed in {round(exec_stop_time - exec_start_time, 5)}s.</b>",
                 )
             )
