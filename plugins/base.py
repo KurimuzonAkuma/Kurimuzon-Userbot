@@ -19,6 +19,7 @@ from utils.scripts import (
     get_prefix,
     get_ram_usage,
     restart,
+    shell_exec,
     with_args,
 )
 
@@ -62,13 +63,26 @@ async def _restart(_: Client, message: Message):
 
 @Client.on_message(~filters.scheduled & command(["update"]) & filters.me & ~filters.forwarded)
 async def _update(_: Client, message: Message):
-    repo = git.Repo()
-    subprocess.run(["git", "fetch"])
-    current_hash = repo.head.commit.hexsha
-    latest_hash = repo.remotes.origin.refs.master.commit.hexsha
-    latest_version = len(list(repo.iter_commits()))
-    current_version = latest_version - (
-        len(list(repo.iter_commits(f"{current_hash}..{latest_hash}"))) + 1
+    args, nargs = get_args(message)
+
+    current_hash = git.Repo().head.commit.hexsha
+
+    git.Repo().remote("origin").fetch()
+
+    branch = git.Repo().active_branch.name
+    upcoming = next(git.Repo().iter_commits(f"origin/{branch}", max_count=1)).hexsha
+
+    if current_hash == upcoming:
+        return await message.edit("<b>Userbot already up to date</b>")
+
+    if "--hard" in args:
+        await shell_exec("git reset --hard HEAD")
+
+    git.Repo().remote("origin").pull()
+
+    upcoming_version = len(list(git.Repo().iter_commits()))
+    current_version = upcoming_version - (
+        len(list(git.Repo().iter_commits(f"{current_hash}..{upcoming}")))
     )
 
     db.set(
@@ -87,7 +101,6 @@ async def _update(_: Client, message: Message):
 
     try:
         subprocess.run([sys.executable, "-m", "pip", "install", "-U", "pip"])
-        subprocess.run(["git", "pull"])
         subprocess.run(
             [
                 sys.executable,
@@ -158,26 +171,28 @@ async def _status(_, message: Message):
     dev_link = "https://t.me/KurimuzonAkuma"
     cpu_usage = get_cpu_usage()
     ram_usage = get_ram_usage()
-    repo = git.Repo()
-    subprocess.run(["git", "fetch"])
-    current_hash = repo.head.commit.hexsha
-    latest_hash = repo.remotes.origin.refs.master.commit.hexsha
-    latest_version = len(list(repo.iter_commits()))
-    current_version = latest_version - (
-        len(list(repo.iter_commits(f"{current_hash}..{latest_hash}"))) + 1
-    )
     current_time = arrow.get()
     uptime = current_time.shift(seconds=perf_counter() - bot_uptime)
     kernel_version = subprocess.run(["uname", "-a"], capture_output=True).stdout.decode().strip()
     system_uptime = subprocess.run(["uptime", "-p"], capture_output=True).stdout.decode().strip()
 
+    current_hash = git.Repo().head.commit.hexsha
+    git.Repo().remote("origin").fetch()
+    branch = git.Repo().active_branch.name
+    upcoming = next(git.Repo().iter_commits(f"origin/{branch}", max_count=1)).hexsha
+    upcoming_version = len(list(git.Repo().iter_commits()))
+    current_version = upcoming_version - (
+        len(list(git.Repo().iter_commits(f"{current_hash}..{upcoming}")))
+    )
+
     result = (
         f"<emoji id=5219903664428167948>🤖</emoji> <a href='{repo_link}'>Kurimuzon-Userbot</a> / "
     )
-    result += f"<a href='{repo_link}/commit/{current_hash}'>#{current_hash[:7]}</a>\n\n"
+    result += f"<a href='{repo_link}/commit/{current_hash}'>#{current_hash[:7]} ({current_version})</a>\n\n"
     result += f"<b>Pyrogram:</b> <code>{pyrogram.__version__}</code>\n"
     result += f"<b>Python:</b> <code>{sys.version}</code>\n"
     result += f"<b>Dev:</b> <a href='{dev_link}'>KurimuzonAkuma</a>\n\n"
+
     if "-a" not in common_args:
         return await message.edit(result, disable_web_page_preview=True)
 
@@ -185,11 +200,11 @@ async def _status(_, message: Message):
     result += (
         f"├─<b>Uptime:</b> <code>{uptime.humanize(current_time, only_distance=True)}</code>\n"
     )
-    result += f"├─<b>Branch:</b> <code>{repo.active_branch}</code>\n"
+    result += f"├─<b>Branch:</b> <code>{branch}</code>\n"
     result += f"├─<b>Current version:</b> <a href='{repo_link}/commit/{current_hash}'>"
     result += f"#{current_hash[:7]} ({current_version})</a>\n"
-    result += f"├─<b>Latest version:</b> <a href='{repo_link}/commit/{latest_hash}'>"
-    result += f"#{latest_hash[:7]} ({latest_version})</a>\n"
+    result += f"├─<b>Latest version:</b> <a href='{repo_link}/commit/{upcoming}'>"
+    result += f"#{upcoming[:7]} ({upcoming_version})</a>\n"
     result += f"├─<b>Prefix:</b> <code>{prefix}</code>\n"
     result += f"├─<b>Modules:</b> <code>{modules_help.modules_count}</code>\n"
     result += f"└─<b>Commands:</b> <code>{modules_help.commands_count}</code>\n\n"

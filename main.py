@@ -53,14 +53,19 @@ async def main():
     async for _ in app.get_dialogs(limit=100):
         pass
 
-    repo = git.Repo()
-    subprocess.run(["git", "fetch"])
-    current_hash = repo.head.commit.hexsha
-    latest_hash = repo.remotes.origin.refs.master.commit.hexsha
-    latest_version = len(list(repo.iter_commits()))
-    current_version = latest_version - (
-        len(list(repo.iter_commits(f"{current_hash}..{latest_hash}"))) + 1
-    )
+    await app.storage.save()
+
+    try:
+        git.Repo()
+    except git.exc.InvalidGitRepositoryError:
+        repo = git.Repo.init()
+        origin = repo.create_remote(
+            "origin", "https://github.com/KurimuzonAkuma/Kurimuzon-Userbot"
+        )
+        origin.fetch()
+        repo.create_head("master", origin.refs.master)
+        repo.heads.master.set_tracking_branch(origin.refs.master)
+        repo.heads.master.checkout(True)
 
     if updater := db.get("core.updater", "restart_info"):
         if updater["type"] == "restart":
@@ -71,15 +76,20 @@ async def main():
                 text=f"<code>Restarted in {perf_counter() - updater['time']:.3f}s...</code>",
             )
         elif updater["type"] == "update":
-            if updater.get("hash") is None:
-                update_text = "Userbot succesfully updated to the latest version."
-            elif updater["hash"] == current_hash:
-                update_text = f"Userbot is up to date with {repo.active_branch} branch"
-            else:
-                update_text = (
-                    f"Userbot succesfully updated from {updater['hash'][:7]} "
-                    f"({updater['version']}) to {current_hash[:7]} ({current_version}) version."
-                )
+            current_hash = git.Repo().head.commit.hexsha
+            git.Repo().remote("origin").fetch()
+            branch = git.Repo().active_branch.name
+            upcoming = next(git.Repo().iter_commits(f"origin/{branch}", max_count=1)).hexsha
+            upcoming_version = len(list(git.Repo().iter_commits()))
+            current_version = upcoming_version - (
+                len(list(git.Repo().iter_commits(f"{current_hash}..{upcoming}")))
+            )
+
+            update_text = (
+                f"Userbot succesfully updated from {updater['hash'][:7]} "
+                f"({updater['version']}) to {current_hash[:7]} ({current_version}) version."
+            )
+
             logging.info(f"{app.me.username}#{app.me.id} | {update_text}.")
             await app.edit_message_text(
                 chat_id=updater["chat_id"],
@@ -92,8 +102,8 @@ async def main():
         db.remove("core.updater", "restart_info")
     else:
         logging.info(
-            f"{app.me.username}#{app.me.id} on {repo.active_branch}"
-            f"@{current_hash[:7]}"
+            f"{app.me.username}#{app.me.id} on {git.Repo().active_branch.name}"
+            f"@{git.Repo().head.commit.hexsha[:7]}"
             " | Userbot succesfully started."
         )
 
