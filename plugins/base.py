@@ -63,6 +63,7 @@ async def _restart(_: Client, message: Message):
 
 @Client.on_message(~filters.scheduled & command(["update"]) & filters.me & ~filters.forwarded)
 async def _update(_: Client, message: Message):
+    await message.edit("<code>Updating...</code>")
     args, nargs = get_args(message)
 
     current_hash = git.Repo().head.commit.hexsha
@@ -78,7 +79,13 @@ async def _update(_: Client, message: Message):
     if "--hard" in args:
         await shell_exec("git reset --hard HEAD")
 
-    git.Repo().remote("origin").pull()
+    try:
+        git.Repo().remote("origin").pull()
+    except git.exc.GitCommandError as e:
+        return await message.edit_text(
+            "<b>Update failed! Try again with --hard argument.</b>\n\n"
+            f"<code>{e.stderr.strip()}</code>"
+        )
 
     upcoming_version = len(list(git.Repo().iter_commits()))
     current_version = upcoming_version - (
@@ -97,7 +104,6 @@ async def _update(_: Client, message: Message):
             "type": "update",
         },
     )
-    await message.edit("<code>Updating...</code>")
 
     try:
         subprocess.run([sys.executable, "-m", "pip", "install", "-U", "pip"])
