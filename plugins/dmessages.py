@@ -11,9 +11,11 @@ from pyrogram.types import Message
 from utils.db import db
 from utils.filters import command
 from utils.misc import modules_help
-from utils.scripts import get_args_raw, get_entity_url, get_full_name, get_message_link
+from utils.scripts import get_args, get_args_raw, get_entity_url, get_full_name, get_message_link
 
 cache = Cache(Cache.MEMORY, ttl=3600, serializer=PickleSerializer())
+
+DEFAULT_MAX_TO_SHOW = 20
 
 reactions = filters.create(lambda _, __, message: bool(message.reactions))
 
@@ -24,6 +26,7 @@ edited_msg = '📝 <b><a href="{ent_link}">{ent_name}</a> edited <a href="{msg_l
 def convert_tags(text: str) -> str:
     text = re.sub("<spoiler", "<tg-spoiler", text)
     text = re.sub("<emoji id", "<tg-emoji emoji-id", text)
+    text = re.sub("</emoji", "</tg-emoji", text)
     text = re.sub(
         r'<pre language="([^"]+)">([^<]+)</pre>',
         r'<pre><code class="language-\1">\2</code></pre>',
@@ -98,10 +101,14 @@ async def dmessages_on_deleted_handler(client: Client, messages: List[Message]):
     if not db.get("dmessages", "bot_token"):
         return
 
-    cached_messages: List[Message] = [await cache.get(message.id) for message in messages][
-        : db.get("dmessages", "max_to_show", 10)
-    ]
-    cached_messages = list(filter(None, cached_messages))
+    cached_messages: List[Message] = list(
+        filter(
+            None,
+            [await cache.get(message.id) for message in messages][
+                : db.get("dmessages", "max_to_show", DEFAULT_MAX_TO_SHOW)
+            ],
+        )
+    )
 
     if not cached_messages:
         return
@@ -179,63 +186,54 @@ async def dmessages_on_deleted_handler(client: Client, messages: List[Message]):
     await bot.session.close()
 
 
-@Client.on_message(command(["delm"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@Client.on_message(command(["dmcfg"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
 async def dmessages_state_handler(client: Client, message: Message):
-    args = get_args_raw(message)
+    args, nargs = get_args(message)
 
-    is_enabled = db.get("dmessages", "enabled", False)
     if not args:
-        return await message.edit_text(f"<b>Deleted messages enabled: {is_enabled}</b>")
-    elif args.lower() not in ("on", "off", "1", "0", "true", "false"):
         return await message.edit_text(
-            "<emoji id=5260342697075416641>❌</emoji><b> State should be on/off</b>",
-            quote=True,
+            "<b>Current config:</b>\n"
+            f'Enabled: <code>{bool(db.get("dmessages", "enabled"))}</code>\n'
+            f'Bot token set: <code>{bool(db.get("dmessages", "bot_token"))}</code>\n'
+            f'Max to show: <code>{db.get("dmessages", "max_to_show", DEFAULT_MAX_TO_SHOW)}</code>'
         )
 
-    if args.lower() in ("on", "1", "true"):
-        db.set("dmessages", "enabled", True)
+    result = ""
+
+    if "-e" in nargs or "--enable" in nargs:
+        e = nargs.get("-e") or nargs.get("--enable")
+        if e not in ("on", "off"):
+            result += "Invalid value for enable. Should be on/off\n"
+        else:
+            is_enable = e == "on"
+            db.set("dmessages", "enabled", is_enable)
+            result += f"Deleted messages {is_enable}\n"
+
+    if "-st" in nargs or "--set-token" in nargs:
+        st = nargs.get("-st") or nargs.get("--set-token")
+        token = re.search(r"(\d+):([A-Za-z0-9_-]+)", st)
+        if not token:
+            result += "Invalid value for set token.\n"
+        else:
+            db.set("dmessages", "bot_token", token[0])
+            db.set("dmessages", "enabled", True)
+            result += "Bot token set and enabled\n"
+
+    if "-max" in nargs or "--max-to-show" in nargs:
+        max_to_show = nargs.get("-max") or nargs.get("--max-to-show")
+        if not max_to_show.isdigit():
+            result += "Invalid value max to show. Should be number.\n"
+        else:
+            db.set("dmessages", "max_to_show", int(max_to_show))
+            result += f"Max messages to show set to: {max_to_show}\n"
+
+    if not result:
         return await message.edit_text(
-            "<emoji id=5260726538302660868>✅</emoji><b> Deleted messages enabled</b>"
-        )
-    else:
-        db.set("dmessages", "enabled", False)
-        return await message.edit_text(
-            "<emoji id=5260726538302660868>✅</emoji><b> Deleted messages disabled</b>"
-        )
-
-
-@Client.on_message(command(["delm_st"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
-async def dmessages_st_handler(client: Client, message: Message):
-    args = get_args_raw(message)
-
-    token = re.search(r"(\d+):([A-Za-z0-9_-]+)", args)
-    if not token:
-        return await message.edit_text(
-            "<emoji id=5260342697075416641>❌</emoji><b> Invalid argument</b>"
-        )
-
-    db.set("dmessages", "bot_token", token[0])
-    db.set("dmessages", "enabled", True)
-    await message.edit_text(
-        "<emoji id=5260726538302660868>✅</emoji><b> Bot token succesfully set!</b>"
-    )
-
-
-@Client.on_message(command(["delm_max"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
-async def dmessages_max_handler(client: Client, message: Message):
-    args = get_args_raw(message)
-    if not args or not args.isdigit():
-        return await message.edit_text(
-            "<emoji id=5260342697075416641>❌</emoji><b> Invalid argument</b>"
+            "<emoji id=5260342697075416641>❌</emoji><b> Invalid arguments</b>"
         )
 
-    db.set("dmessages", "max_to_show", int(args))
-    await message.edit_text(
-        f"<emoji id=5260726538302660868>✅</emoji><b> Max messages to show set to: {args}</b>"
-    )
+    return await message.edit_text(result)
 
 
-module = modules_help.add_module("delm", __file__)
-module.add_command("delm", "Enable/disable deleted messages", "[on/off]")
-module.add_command("delm_max", "Set max number of deleted messages to show", "[number]")
-module.add_command("delm_st", "Set bot token")
+module = modules_help.add_module("deleted_messages", __file__)
+module.add_command("dmcfg", "Deleted messages config", "-e [on/off]* | -st [token]* | -max [int]*")
