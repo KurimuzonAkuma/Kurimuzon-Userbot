@@ -177,7 +177,9 @@ def get_args(
     while i < len(args):
         arg = args[i]
         if arg.startswith("-"):
-            if i + 1 < len(args) and not args[i + 1].startswith("-"):
+            if i + 1 < len(args) and (
+                not args[i + 1].startswith("-") or len(args[i + 1].split()) > 1
+            ):
                 named_args[arg] = args[i + 1]
                 i += 2
             else:
