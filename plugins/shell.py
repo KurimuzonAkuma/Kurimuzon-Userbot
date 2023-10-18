@@ -14,7 +14,7 @@ from utils.scripts import get_args, get_args_raw, shell_exec, with_args
 
 @Client.on_message(~filters.scheduled & command(["shell", "sh"]) & filters.me & ~filters.forwarded)
 @with_args("<b>Command is not provided</b>")
-async def shell(_: Client, message: Message):
+async def shell_handler(_: Client, message: Message):
     await message.edit("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
 
     cmd_text = get_args_raw(message)
@@ -48,7 +48,7 @@ async def shell(_: Client, message: Message):
 
 
 @Client.on_message(command(["shcfg"]) & filters.me)
-async def secret_toggle_handler(_: Client, message: Message):
+async def shell_config_handler(_: Client, message: Message):
     args, nargs = get_args(message)
 
     if not args:
