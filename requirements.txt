@@ -1,4 +1,3 @@
-openai
 aiocache
 aiogram
 aiohttp
@@ -6,8 +5,9 @@ aiosqlite
 apscheduler
 arrow
 GitPython
+https://github.com/KurimuzonAkuma/pyrogram/archive/dev.zip
+openai
 psutil
-pyrogram
 python-dotenv
 qrcode
 requests
