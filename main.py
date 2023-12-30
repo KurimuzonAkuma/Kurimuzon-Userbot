@@ -15,6 +15,7 @@ from utils import config
 from utils.db import db
 from utils.misc import scheduler, scheduler_jobs, script_path
 from utils.scripts import CustomFormatter, restart
+from utils.storage import AnyStorage
 
 if script_path != os.getcwd():
     os.chdir(script_path)
@@ -47,6 +48,8 @@ async def main():
         parse_mode=ParseMode.HTML,
         **config.proxy_settings,
     )
+
+    app.storage = AnyStorage(client=app)
 
     await app.start()
 
