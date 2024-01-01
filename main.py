@@ -6,6 +6,7 @@ import platform
 import shutil
 import subprocess
 from time import perf_counter
+from traceback import print_exc
 
 import git
 from pyrogram import Client, idle
@@ -71,37 +72,42 @@ async def main():
         repo.heads.master.checkout(True)
 
     if updater := db.get("core.updater", "restart_info"):
-        if updater["type"] == "restart":
-            logging.info(f"{app.me.username}#{app.me.id} | Userbot succesfully restarted.")
-            await app.edit_message_text(
-                chat_id=updater["chat_id"],
-                message_id=updater["message_id"],
-                text=f"<code>Restarted in {perf_counter() - updater['time']:.3f}s...</code>",
-            )
-        elif updater["type"] == "update":
-            current_hash = git.Repo().head.commit.hexsha
-            git.Repo().remote("origin").fetch()
-            branch = git.Repo().active_branch.name
-            upcoming = next(git.Repo().iter_commits(f"origin/{branch}", max_count=1)).hexsha
-            upcoming_version = len(list(git.Repo().iter_commits()))
-            current_version = upcoming_version - (
-                len(list(git.Repo().iter_commits(f"{current_hash}..{upcoming}")))
-            )
+        try:
+            if updater["type"] == "restart":
+                logging.info(f"{app.me.username}#{app.me.id} | Userbot succesfully restarted.")
+                await app.edit_message_text(
+                    chat_id=updater["chat_id"],
+                    message_id=updater["message_id"],
+                    text=f"<code>Restarted in {perf_counter() - updater['time']:.3f}s...</code>",
+                )
+            elif updater["type"] == "update":
+                current_hash = git.Repo().head.commit.hexsha
+                git.Repo().remote("origin").fetch()
+                branch = git.Repo().active_branch.name
+                upcoming = next(git.Repo().iter_commits(f"origin/{branch}", max_count=1)).hexsha
+                upcoming_version = len(list(git.Repo().iter_commits()))
+                current_version = upcoming_version - (
+                    len(list(git.Repo().iter_commits(f"{current_hash}..{upcoming}")))
+                )
 
-            update_text = (
-                f"Userbot succesfully updated from {updater['hash'][:7]} "
-                f"({updater['version']}) to {current_hash[:7]} ({current_version}) version."
-            )
+                update_text = (
+                    f"Userbot succesfully updated from {updater['hash'][:7]} "
+                    f"({updater['version']}) to {current_hash[:7]} ({current_version}) version."
+                )
 
-            logging.info(f"{app.me.username}#{app.me.id} | {update_text}.")
-            await app.edit_message_text(
-                chat_id=updater["chat_id"],
-                message_id=updater["message_id"],
-                text=(
-                    f"<code>{update_text}.\n\n"
-                    f"Restarted in {perf_counter() - updater['time']:.3f}s...</code>"
-                ),
-            )
+                logging.info(f"{app.me.username}#{app.me.id} | {update_text}.")
+                await app.edit_message_text(
+                    chat_id=updater["chat_id"],
+                    message_id=updater["message_id"],
+                    text=(
+                        f"<code>{update_text}.\n\n"
+                        f"Restarted in {perf_counter() - updater['time']:.3f}s...</code>"
+                    ),
+                )
+        except Exception:
+            print("Error when updating!")
+            print_exc()
+
         db.remove("core.updater", "restart_info")
     else:
         logging.info(
