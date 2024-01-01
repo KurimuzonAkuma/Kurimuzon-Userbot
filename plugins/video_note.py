@@ -1,41 +1,66 @@
+import os
 import shutil
-import subprocess
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+import tempfile
 
 from pyrogram import Client, filters
 from pyrogram.enums import MessageMediaType
+from pyrogram.errors import VoiceMessagesForbidden
 from pyrogram.types import Message
 
+from utils.db import db
 from utils.filters import command
 from utils.misc import modules_help
-from utils.scripts import with_reply
+from utils.scripts import shell_exec
 
 
 @Client.on_message(~filters.scheduled & command(["vnote"]) & filters.me & ~filters.forwarded)
-@with_reply
-async def vnote(client: Client, message: Message):
+async def vnote(_: Client, message: Message):
     if not shutil.which("ffmpeg"):
         return await message.edit_text("<b>ffmpeg not installed!</b>")
 
-    if message.reply_to_message.media not in (MessageMediaType.VIDEO, MessageMediaType.ANIMATION):
+    msg = message.reply_to_message or message
+
+    if not msg.media:
+        return await message.edit_text("<b>Message should contain media!</b>")
+
+    if msg.media not in (
+        MessageMediaType.VIDEO,
+        MessageMediaType.ANIMATION,
+    ):
         return await message.edit_text("<b>Only video and gif supported!</b>")
 
-    await message.delete()
-    with TemporaryDirectory() as tempdir:
-        with NamedTemporaryFile("wb", suffix=".mp4", dir=tempdir) as file:
-            data = await message.reply_to_message.download(in_memory=True)
+    media = getattr(msg, msg.media.value)
 
-            file.write(data.getbuffer())
-            file.seek(0)
+    with tempfile.TemporaryDirectory() as tempdir:
+        input_file_path = os.path.join(tempdir, "input.mp4")
+        output_file_path = os.path.join(tempdir, "output.mp4")
 
-            subprocess.run(
-                f'ffmpeg -y -i {file.name} -vf "crop=min(iw\,ih):min(iw\,ih),scale=2*trunc(ih/2):2*trunc(ih/2)" {tempdir}/output.mp4',
-                shell=True,
+        await msg.download(file_name=input_file_path)
+
+        if media.width == 360 and media.height == 360 and media.duration <= 60:
+            output_file_path = input_file_path
+        else:
+            await message.edit_text("<code>Converting video...</code>")
+            await shell_exec(
+                command=f"ffmpeg -y -hwaccel auto -i {input_file_path} "
+                "-t 00:01:00 "
+                "-preset superfast "
+                "-crf 24 -vcodec libx264 -acodec aac "
+                f'-vf "crop=min(iw\,ih):min(iw\,ih),scale=2*trunc(ih/2):2*trunc(ih/2),scale=360:360" '
+                f"{output_file_path}",
+                executable=db.get("shell", "executable"),
             )
 
-            await client.send_video_note(
-                chat_id=message.chat.id, video_note=f"{tempdir}/output.mp4"
+        await message.delete()
+
+        try:
+            await message.reply_video_note(
+                video_note=output_file_path,
+                quote=False,
+                message_thread_id=message.message_thread_id,
             )
+        except VoiceMessagesForbidden:
+            await message.edit_text("<b>Voice messages forbidden in this chat.</b>")
 
 
 module = modules_help.add_module("vnote", __file__)
