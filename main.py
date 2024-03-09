@@ -3,8 +3,6 @@ import contextlib
 import logging
 import os
 import platform
-import shutil
-import subprocess
 from time import perf_counter
 from traceback import print_exc
 
@@ -15,8 +13,7 @@ from pyrogram.enums import ParseMode
 from utils import config
 from utils.db import db
 from utils.misc import scheduler, scheduler_jobs, script_path
-from utils.scripts import CustomFormatter, restart
-from utils.storage import AnyStorage
+from utils.scripts import CustomFormatter
 
 if script_path != os.getcwd():
     os.chdir(script_path)
@@ -48,10 +45,9 @@ async def main():
         sleep_threshold=30,
         workdir=script_path,
         parse_mode=ParseMode.HTML,
+        skip_updates=False,
         **config.proxy_settings,
     )
-
-    app.storage = AnyStorage(client=app)
 
     await app.start()
 
@@ -84,16 +80,10 @@ async def main():
             elif updater["type"] == "update":
                 current_hash = git.Repo().head.commit.hexsha
                 git.Repo().remote("origin").fetch()
-                branch = git.Repo().active_branch.name
-                upcoming = next(git.Repo().iter_commits(f"origin/{branch}", max_count=1)).hexsha
-                upcoming_version = len(list(git.Repo().iter_commits()))
-                current_version = upcoming_version - (
-                    len(list(git.Repo().iter_commits(f"{current_hash}..{upcoming}")))
-                )
 
                 update_text = (
                     f"Userbot succesfully updated from {updater['hash'][:7]} "
-                    f"({updater['version']}) to {current_hash[:7]} ({current_version}) version."
+                    f"to {current_hash[:7]} version."
                 )
 
                 logging.info(f"{app.me.username}#{app.me.id} | {update_text}.")
@@ -129,27 +119,25 @@ async def main():
     scheduler.start()
 
     await idle()
+
     await app.stop()
 
 
 if __name__ == "__main__":
     with contextlib.suppress(KeyboardInterrupt, SystemExit):
         if platform.system() == "Windows":
-            logging.error("Windows is not supported!")
-            exit()
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        try:
+            import uvloop
 
-        if not shutil.which("termux-setup-storage"):
-            try:
-                import uvloop
-
-                uvloop.install()
-            except ImportError:
-                subprocess.run("pip install uvloop", shell=True)
-                restart()
+            uvloop.install()
+        except ImportError:
+            logging.warning("uvloop not installed.\nInstall with: pip install uvloop")
 
         if platform.python_version_tuple() >= ("3", "11"):
             with asyncio.Runner() as runner:
-                runner.get_loop().run_until_complete(main())
+                loop = runner.get_loop()
+                loop.run_until_complete(main())
         else:
             loop = asyncio.new_event_loop()
             loop.run_until_complete(main())

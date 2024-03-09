@@ -1,12 +1,13 @@
 import asyncio
 import html
+import re
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from time import perf_counter
 from traceback import print_exc
 
-from pyrogram import Client, filters
+from pyrogram import Client, enums, filters
 from pyrogram.types import Message
 
 from utils.db import db
@@ -17,12 +18,16 @@ from utils.scripts import paste_neko, shell_exec
 
 async def aexec(code, *args, timeout=None):
     exec(
-        f"async def __todo(client, message, *args):\n"
-        + " app = client; "
-        + " m = message; "
-        + " r = m.reply_to_message; "
-        + " u = m.from_user; "
+        "async def __todo(client, message, *args):\n"
+        + " from pyrogram import raw, types, enums\n"
+        + " from utils.db import db\n"
+        + " app = client\n"
+        + " m = message\n"
+        + " r = m.reply_to_message\n"
+        + " u = m.from_user\n"
         + " ru = getattr(r, 'from_user', None)\n"
+        + " p = print\n"
+        + " here = m.chat.id\n"
         + "".join(f"\n {_l}" for _l in code.split("\n"))
     )
 
@@ -48,34 +53,74 @@ async def python_exec(client: Client, message: Message):
         return await message.edit_text("<b>Code to execute isn't provided</b>")
 
     if message.command[0] == "rpy":
-        code = message.reply_to_message.text
+        if not message.reply_to_message:
+            return await message.edit_text("<b>Code to execute isn't provided</b>")
+
+        # Check if message is a reply to message with already executed code
+        for entity in message.reply_to_message.entities:
+            if entity.type == enums.MessageEntityType.PRE and entity.language == "python":
+                code = message.reply_to_message.text[entity.offset : entity.offset + entity.length]
+                break
+        else:
+            code = message.reply_to_message.text
     else:
         code = message.text.split(maxsplit=1)[1]
 
     await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
 
     try:
+        code = code.replace("\u00A0", "")
+
         start_time = perf_counter()
-        result = await aexec(code, client, message, timeout=60)
+        result = await aexec(code, client, message, timeout=db.get("shell", "timeout", 60))
         stop_time = perf_counter()
 
-        if len(result) > 3072:
-            result = html.escape(await paste_neko(result))
-        else:
-            result = f"<code>{html.escape(result)}</code>"
+        # Replace account phone number to anonymous
+        result = result.replace(client.me.phone_number, "88806524973")
 
-        return await message.edit_text(
-            code_result.format(
-                emoji_id=5260480440971570446,
-                language="Python",
-                pre_language="python",
-                code=html.escape(code),
-                result=f"<b><emoji id=5472164874886846699>✨</emoji> Result</b>:\n"
-                f"{result}\n"
-                f"<b>Completed in {round(stop_time - start_time, 5)}s.</b>",
-            ),
-            disable_web_page_preview=True,
-        )
+        if not result:
+            result = "No result"
+        elif len(result) > 3072:
+            paste_result = html.escape(await paste_neko(result))
+
+            if paste_result == "Pasting failed":
+                with open("error.log", "w") as file:
+                    file.write(result)
+
+                result = None
+            else:
+                result = paste_result
+
+        elif re.match(r"^(https?):\/\/[^\s\/$.?#].[^\s]*$", result):
+            result = html.escape(result)
+        else:
+            result = f"<pre>{html.escape(result)}</pre>"
+
+        if result:
+            return await message.edit_text(
+                code_result.format(
+                    emoji_id=5260480440971570446,
+                    language="Python",
+                    pre_language="python",
+                    code=html.escape(code),
+                    result=f"<b><emoji id=5472164874886846699>✨</emoji> Result</b>:\n"
+                    f"{result}\n"
+                    f"<b>Completed in {round(stop_time - start_time, 5)}s.</b>",
+                ),
+                disable_web_page_preview=True,
+            )
+        else:
+            return await message.reply_document(
+                document="error.log",
+                caption=code_result.format(
+                    emoji_id=5260480440971570446,
+                    language="Python",
+                    pre_language="python",
+                    code=html.escape(code),
+                    result=f"<b><emoji id=5472164874886846699>✨</emoji> Result is too long</b>\n"
+                    f"<b>Completed in {round(stop_time - start_time, 5)}s.</b>",
+                ),
+            )
     except asyncio.TimeoutError:
         return await message.edit_text(
             code_result.format(
@@ -147,7 +192,9 @@ async def gcc_exec(_: Client, message: Message):
 
                 exec_start_time = perf_counter()
                 rcode, stdout, stderr = await shell_exec(
-                    command="./output", executable=db.get("shell", "executable"), timeout=timeout
+                    command="./output",
+                    executable=db.get("shell", "executable"),
+                    timeout=timeout,
                 )
                 exec_stop_time = perf_counter()
             except asyncio.exceptions.TimeoutError:
@@ -178,7 +225,7 @@ async def gcc_exec(_: Client, message: Message):
                 if len(stdout) > 3072:
                     result = html.escape(await paste_neko(stdout))
                 else:
-                    result = f"<code>{html.escape(stdout)}</code>"
+                    result = f"<pre>{html.escape(result)}</pre>"
 
                 return await message.edit_text(
                     code_result.format(
@@ -237,7 +284,9 @@ async def gpp_exec(_: Client, message: Message):
 
                 exec_start_time = perf_counter()
                 rcode, stdout, stderr = await shell_exec(
-                    command="./output", executable=db.get("shell", "executable"), timeout=timeout
+                    command="./output",
+                    executable=db.get("shell", "executable"),
+                    timeout=timeout,
                 )
                 exec_stop_time = perf_counter()
             except asyncio.exceptions.TimeoutError:
@@ -268,7 +317,7 @@ async def gpp_exec(_: Client, message: Message):
                 if len(stdout) > 3072:
                     result = html.escape(await paste_neko(stdout))
                 else:
-                    result = f"<code>{html.escape(stdout)}</code>"
+                    result = f"<pre>{html.escape(result)}</pre>"
 
                 return await message.edit_text(
                     code_result.format(
@@ -339,7 +388,7 @@ async def lua_exec(_: Client, message: Message):
                 if len(stdout) > 3072:
                     result = html.escape(await paste_neko(stdout))
                 else:
-                    result = f"<code>{html.escape(stdout)}</code>"
+                    result = f"<pre>{html.escape(result)}</pre>"
 
                 return await message.edit_text(
                     code_result.format(
@@ -409,7 +458,7 @@ async def go_exec(_: Client, message: Message):
                 if len(stdout) > 3072:
                     result = html.escape(await paste_neko(stdout))
                 else:
-                    result = f"<code>{html.escape(stdout)}</code>"
+                    result = f"<pre>{html.escape(result)}</pre>"
 
                 return await message.edit_text(
                     code_result.format(
@@ -481,7 +530,7 @@ async def node_exec(_: Client, message: Message):
                 if len(stdout) > 3072:
                     result = html.escape(await paste_neko(stdout))
                 else:
-                    result = f"<code>{html.escape(stdout)}</code>"
+                    result = f"<pre>{html.escape(result)}</pre>"
 
                 return await message.edit_text(
                     code_result.format(

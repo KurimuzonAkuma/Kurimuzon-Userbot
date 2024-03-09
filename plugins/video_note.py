@@ -37,10 +37,11 @@ async def vnote(_: Client, message: Message):
 
         await msg.download(file_name=input_file_path)
 
+        await message.edit_text("<code>Converting video...</code>")
+
         if media.width == 360 and media.height == 360 and media.duration <= 60:
             output_file_path = input_file_path
         else:
-            await message.edit_text("<code>Converting video...</code>")
             await shell_exec(
                 command=f"ffmpeg -y -hwaccel auto -i {input_file_path} "
                 "-t 00:01:00 "
@@ -51,16 +52,13 @@ async def vnote(_: Client, message: Message):
                 executable=db.get("shell", "executable"),
             )
 
-        await message.delete()
-
         try:
             await message.reply_video_note(
                 video_note=output_file_path,
                 quote=False,
-                message_thread_id=message.message_thread_id,
             )
         except VoiceMessagesForbidden:
-            await message.edit_text("<b>Voice messages forbidden in this chat.</b>")
+            return await message.edit_text("<b>Voice messages forbidden in this chat.</b>")
 
 
 module = modules_help.add_module("vnote", __file__)
