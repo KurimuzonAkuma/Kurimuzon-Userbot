@@ -1,7 +1,4 @@
-import asyncio
-
 import openai
-from openai import error
 from pyrogram import Client, enums, filters
 from pyrogram.types import Message
 
@@ -31,8 +28,6 @@ async def chatpgt(_: Client, message: Message):
             quote=True,
         )
 
-    openai.api_key = api_key
-
     data: dict = db.get(
         "ChatGPT",
         f"gpt_id{message.chat.id}",
@@ -55,12 +50,15 @@ async def chatpgt(_: Client, message: Message):
         "<emoji id=5443038326535759644>💬</emoji><b> GPT is generating response, please wait</b>",
         quote=True,
     )
+
+    client = openai.AsyncOpenAI(api_key=api_key)
+
     try:
-        completion = await openai.ChatCompletion.acreate(
+        completion = await client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=data["gpt_messages"] + [{"role": "user", "content": args}],
         )
-    except error.RateLimitError:
+    except openai.RateLimitError:
         data["enabled"] = True
         db.set("ChatGPT", f"gpt_id{message.chat.id}", data)
         return await msg.edit_text(
