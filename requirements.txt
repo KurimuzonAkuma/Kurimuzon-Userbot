@@ -12,3 +12,5 @@ python-dotenv
 qrcode
 requests
 tgcrypto
+ytmusicapi
+yt-dlp
