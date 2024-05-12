@@ -1,21 +1,21 @@
-from pyrogram import Client, filters, enums
+from io import BytesIO
+from os import remove
+
+from aiohttp import ClientSession
+from pyrogram import Client, enums, filters
 from pyrogram.types import Message
+from yt_dlp import YoutubeDL
+from ytmusicapi import YTMusic
 
 from utils.filters import command
 from utils.misc import modules_help
 
-from ytmusicapi import YTMusic
-from yt_dlp import YoutubeDL
-
-from aiohttp import ClientSession
-from io import BytesIO
-from os import remove
-
 yt_music = YTMusic()
+
 
 @Client.on_message(~filters.scheduled & command(["ytm"]) & filters.me & ~filters.forwarded)
 async def ytm(_, message: Message):
-    if len(message.command) == 1 and message.command[0] != "rpy":
+    if len(message.command) == 1 and message.command[0] != "ytm":
         return await message.edit_text("<b>Query to search isn't provided</b>")
 
     await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Searching...</b>")
@@ -32,7 +32,9 @@ async def ytm(_, message: Message):
         thumb_file.write(await (await session.get(thumb_url)).read())
     thumb_file.name = results[0]["videoId"] + ".jpg"
     with YoutubeDL({"format": "bestaudio[ext=m4a]"}) as yt:
-        info_dict = yt.extract_info("https://music.youtube.com/watch?v=" + results[0]["videoId"], download=True)
+        info_dict = yt.extract_info(
+            "https://music.youtube.com/watch?v=" + results[0]["videoId"], download=True
+        )
         audio_path = yt.prepare_filename(info_dict)
 
     await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Uploading...</b>")
@@ -43,7 +45,7 @@ async def ytm(_, message: Message):
         title=results[0]["title"],
         performer=results[0]["artists"][-1]["name"],
         thumb=thumb_file,
-        duration=results[0]["duration_seconds"]
+        duration=results[0]["duration_seconds"],
     )
 
     await message.edit_text(
@@ -59,11 +61,13 @@ async def ytm(_, message: Message):
             artist=results[0]["artists"][-1]["name"],
             album=results[0]["album"]["name"],
             explict=results[0]["isExplicit"],
-            link=msg.link if message.chat.type != enums.ChatType.PRIVATE else "👇"
-        )
+            link=msg.link if message.chat.type != enums.ChatType.PRIVATE else "👇",
+        ),
+        disable_web_page_preview=True,
     )
 
     return remove(audio_path)
+
 
 module = modules_help.add_module("ytm", __file__)
 module.add_command("ytm", "Download a song from music.youtube.com")
