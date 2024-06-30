@@ -107,6 +107,15 @@ def with_premium(func):
     return wrapped
 
 
+async def dpaste(code: str):
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
+        data = {"content": code, "lexer": "python", "expires": "never"}
+        async with session.post("https://dpaste.org/api/", data=data) as resp:
+            if resp.status != 200:
+                return "Pasting failed!"
+            else:
+                return (await resp.text()).replace('"', "")
+
 async def paste_neko(code: str):
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
@@ -117,7 +126,7 @@ async def paste_neko(code: str):
                 paste.raise_for_status()
                 result = await paste.json()
     except Exception:
-        return "Pasting failed"
+        return await dpaste(code=code)
     else:
         return f"nekobin.com/{result['result']['key']}.py"
 

@@ -15,7 +15,7 @@ yt_music = YTMusic()
 
 @Client.on_message(~filters.scheduled & command(["ytm"]) & filters.me & ~filters.forwarded)
 async def ytm(_, message: Message):
-    if len(message.command) == 1 and message.command[0] != "rpy":
+    if len(message.command) == 1 and message.command[0] != "ytm":
         return await message.edit_text("<b>Query to search isn't provided</b>")
 
     await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Searching...</b>")
