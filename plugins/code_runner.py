@@ -83,7 +83,7 @@ async def python_exec(client: Client, message: Message):
         elif len(result) > 3072:
             paste_result = html.escape(await paste_neko(result))
 
-            if paste_result == "Pasting failed":
+            if paste_result == "Pasting failed!":
                 with open("error.log", "w") as file:
                     file.write(result)
 
