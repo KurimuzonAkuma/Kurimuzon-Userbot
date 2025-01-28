@@ -1,6 +1,7 @@
+import datetime
 import pathlib
-from time import perf_counter
 
+import environs
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from utils.scripts import ModuleHelp
@@ -11,4 +12,7 @@ modules_help = ModuleHelp()
 scheduler_jobs = []
 
 scheduler = AsyncIOScheduler()
-bot_uptime = perf_counter()
+uptime = datetime.datetime.now()
+
+env = environs.Env()
+env.read_env("./.env")

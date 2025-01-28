@@ -8,11 +8,15 @@ from aiogram import Bot
 from pyrogram import Client, enums, filters
 from pyrogram.enums import ChatType
 from pyrogram.types import Message
+from pyrogram.utils import get_channel_id
 
 from utils.db import db
 from utils.filters import command
 from utils.misc import modules_help
-from utils.scripts import get_args, get_args_raw, get_entity_url, get_full_name, get_message_link
+from utils.scripts import (
+    get_args,
+    get_args_raw
+    )
 
 cache = Cache(Cache.MEMORY, ttl=3600, serializer=PickleSerializer())
 
@@ -70,7 +74,9 @@ async def get_cached_media_group(
     return media_group
 
 
-async def get_input_media_group(client: Client, cached_messages: Iterable[Message], text: str):
+async def get_input_media_group(
+    client: Client, cached_messages: Iterable[Message], text: str
+):
     processed_media_groups_ids = []
     input_media_group = []
 
@@ -146,7 +152,9 @@ async def send_cached_message(
         else:
             await bot.send_document(
                 chat_id=client.me.id,
-                document=aiogram.types.BufferedInputFile(file_bytes.getbuffer(), file_bytes.name),
+                document=aiogram.types.BufferedInputFile(
+                    file_bytes.getbuffer(), file_bytes.name
+                ),
                 caption=text,
             )
     else:
@@ -180,7 +188,9 @@ async def history_log_message_handler(client: Client, message: Message):
     ):
         return
 
-    if message.chat.type == ChatType.CHANNEL and not db.get("history", "is_channels_enabled"):
+    if message.chat.type == ChatType.CHANNEL and not db.get(
+        "history", "is_channels_enabled"
+    ):
         return
 
     await cache.set(message.id, message)
@@ -204,9 +214,9 @@ async def history_on_edited_handler(client: Client, message: Message):
     sender = cached_message.from_user or cached_message.sender_chat
 
     text = edited_map[cached_message.chat.type].format(
-        ent_link=get_entity_url(sender, openmessage=True),
-        ent_name=get_full_name(sender),
-        msg_link=get_message_link(cached_message, cached_message.chat),
+        ent_link=sender.mention if cached_message.from_user else f"t.me/c/{get_channel_id(sender.id)}",
+        ent_name=sender.full_name,
+        msg_link=cached_message.link,
         edit_text=convert_tags(edit_text.html) if edit_text else "",
         orig_text=convert_tags(orig_text.html) if orig_text else "",
     )
@@ -257,29 +267,37 @@ async def history_on_deleted_handler(client: Client, messages: List[Message]):
 
         if cached_message.media and cached_message.media_group_id:
             if not is_media_group_sent:
-                input_media_group = await get_input_media_group(client, cached_messages, text)
+                input_media_group = await get_input_media_group(
+                    client, cached_messages, text
+                )
                 await send_cached_message(
-                    client=client, cached_message=cached_message, media_group=input_media_group
+                    client=client,
+                    cached_message=cached_message,
+                    media_group=input_media_group,
                 )
                 is_media_group_sent = True
         else:
-            await send_cached_message(client=client, cached_message=cached_message, text=text)
+            await send_cached_message(
+                client=client, cached_message=cached_message, text=text
+            )
 
         await cache.delete(cached_message.id)
 
 
-@Client.on_message(command(["hcfg"]) & filters.me & ~filters.forwarded & ~filters.scheduled)
+@Client.on_message(
+    command(["hcfg"]) & filters.me & ~filters.forwarded & ~filters.scheduled
+)
 async def history_config_handler(client: Client, message: Message):
     args, nargs = get_args(message)
 
     if not args:
         return await message.edit_text(
             "<b>Current config:</b>\n"
-            f'Enabled: <code>{bool(db.get("history", "enabled"))}</code>\n'
-            f'Bot token set: <code>{bool(db.get("history", "bot_token"))}</code>\n'
-            f'Max to show: <code>{db.get("history", "max_to_show", DEFAULT_MAX_TO_SHOW)}</code>\n'
-            f'Chat logging: <code>{bool(db.get("history", "is_chats_enabled"))}</code>\n'
-            f'Channels logging: <code>{bool(db.get("history", "is_channels_enabled"))}</code>'
+            f"Enabled: <code>{bool(db.get('history', 'enabled'))}</code>\n"
+            f"Bot token set: <code>{bool(db.get('history', 'bot_token'))}</code>\n"
+            f"Max to show: <code>{db.get('history', 'max_to_show', DEFAULT_MAX_TO_SHOW)}</code>\n"
+            f"Chat logging: <code>{bool(db.get('history', 'is_chats_enabled'))}</code>\n"
+            f"Channels logging: <code>{bool(db.get('history', 'is_channels_enabled'))}</code>"
         )
 
     result = ""
@@ -337,7 +355,9 @@ async def history_config_handler(client: Client, message: Message):
     return await message.edit_text(result)
 
 
-@Client.on_message(filters.regex("^\+hwl ") & filters.me & ~filters.forwarded & ~filters.scheduled)
+@Client.on_message(
+    filters.regex(r"^\+hwl ") & filters.me & ~filters.forwarded & ~filters.scheduled
+)
 async def history_add_whitelist_handler(client: Client, message: Message):
     args = get_args_raw(message)
 
@@ -356,7 +376,9 @@ async def history_add_whitelist_handler(client: Client, message: Message):
     return await message.edit_text("<b>Chat added to whitelist</b>")
 
 
-@Client.on_message(filters.regex("^\-hwl ") & filters.me & ~filters.forwarded & ~filters.scheduled)
+@Client.on_message(
+    filters.regex(r"^\-hwl ") & filters.me & ~filters.forwarded & ~filters.scheduled
+)
 async def history_remove_whitelist_handler(client: Client, message: Message):
     args = get_args_raw(message)
 

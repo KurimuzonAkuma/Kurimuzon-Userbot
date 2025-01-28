@@ -1,24 +1,26 @@
 import asyncio
+import datetime
 import logging
 import os
+import random
 import shlex
-import sys
+import string
+import traceback
+from time import perf_counter
 from typing import Dict, List, Optional, Tuple, Union
 
 import aiohttp
-import arrow
+import git
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from pyrogram import Client, enums, errors
+from pyrogram import Client, errors
 from pyrogram.enums import ChatType
-from pyrogram.session import Session
-from pyrogram.storage import Storage
 from pyrogram.types import Chat, Message, User
 
 from utils.db import db
 
 
-class CustomFormatter(logging.Formatter):
+class Formatter(logging.Formatter):
     # Colors
     black = "\x1b[30m"
     red = "\x1b[31m"
@@ -49,19 +51,38 @@ class CustomFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-def restart():
-    os.execvp(sys.executable, [sys.executable, *sys.argv])
+def get_proxy(proxies_path: str = "proxies.txt") -> dict:
+    try:
+        with open(proxies_path, "r") as f:
+            proxies = [
+                line.strip() for line in f if line.strip() and not line.startswith("#")
+            ]
+    except FileNotFoundError:
+        return None
 
+    if not proxies:
+        return None
 
-def get_full_name(obj: Union[User, Chat]) -> str:
-    if isinstance(obj, Chat):
-        if obj.type == ChatType.PRIVATE:
-            return f"{obj.first_name} {obj.last_name}" if obj.last_name else obj.first_name
-        return obj.title
-    elif isinstance(obj, User):
-        return f"{obj.first_name} {obj.last_name}" if obj.last_name else obj.first_name
+    random_proxy = random.choice(
+        [line.strip() for line in proxies if line.strip() and not line.startswith("#")]
+    )
+
+    if not random_proxy:
+        return None
+
+    protocol, proxy = random_proxy.split()
+    proxy = proxy.split("@")
+
+    if len(proxy) == 2:
+        username, password = proxy[0].split(":")
+
+        proxy = dict(
+            scheme=protocol, server=proxy[1], username=username, password=password
+        )
     else:
-        raise TypeError("obj must be User or Chat")
+        proxy = dict(scheme=protocol, server=proxy[0])
+
+    return proxy
 
 
 def format_exc(e: Exception, suffix="") -> str:
@@ -99,7 +120,7 @@ def with_args(text: str):
 
 def with_premium(func):
     async def wrapped(client: Client, message: Message):
-        if not (await client.get_me()).is_premium:
+        if not (await client.get_users("me")).is_premium:
             await message.edit("<b>Premium account is required</b>")
         else:
             return await func(client, message)
@@ -107,28 +128,36 @@ def with_premium(func):
     return wrapped
 
 
-async def dpaste(code: str):
-    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
-        data = {"content": code, "lexer": "python", "expires": "never"}
-        async with session.post("https://dpaste.org/api/", data=data) as resp:
-            if resp.status != 200:
-                return "Pasting failed!"
-            else:
-                return (await resp.text()).replace('"', "")
+def generate_random_string(length):
+    characters = string.ascii_letters + string.digits
+    return "".join(random.choice(characters) for _ in range(length))
 
-async def paste_neko(code: str):
+
+async def paste_yaso(code: str, expiration_time: int = 10080):
     try:
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
+        async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(ssl=False)
+        ) as session:
             async with session.post(
-                "https://nekobin.com/api/documents",
-                json={"content": code},
+                "https://api.yaso.su/v1/auth/guest",
+            ) as auth:
+                auth.raise_for_status()
+
+            async with session.post(
+                "https://api.yaso.su/v1/records",
+                json={
+                    "captcha": generate_random_string(569),
+                    "codeLanguage": "auto",
+                    "content": code,
+                    "expirationTime": expiration_time,
+                },
             ) as paste:
                 paste.raise_for_status()
                 result = await paste.json()
     except Exception:
-        return await dpaste(code=code)
+        return "Pasting failed"
     else:
-        return f"nekobin.com/{result['result']['key']}.py"
+        return f"https://yaso.su/{result['url']}"
 
 
 def get_prefix():
@@ -203,7 +232,9 @@ class ScheduleJob:
     def __init__(
         self,
         func: callable,
-        trigger: Optional[Union[CronTrigger, IntervalTrigger]] = IntervalTrigger(seconds=3600),
+        trigger: Optional[Union[CronTrigger, IntervalTrigger]] = IntervalTrigger(
+            seconds=3600
+        ),
         *args,
         **kwargs,
     ):
@@ -242,13 +273,6 @@ def get_cpu_usage() -> float:
         return round(cpu, 1)
     except Exception:
         return 0
-
-
-def humanize_seconds(seconds: Union[int, float]) -> str:
-    """Returns humanized time delta from seconds"""
-    current_time = arrow.get()
-    target_time = current_time.shift(seconds=-seconds)
-    return target_time.humanize(current_time, only_distance=True)
 
 
 class Command:
@@ -350,7 +374,7 @@ class ModuleHelp:
         help_text = f"For more help on how to use a command, type <code>{prefix}help [module]</code>\n\nAvailable Modules:\n"
 
         for module_name, module in sorted(self.modules.items(), key=lambda x: x[0]):
-            help_text += f'• {module_name.title()}: {" ".join([f"<code>{prefix + cmd_name}</code>" for cmd_name in module.commands.keys()])}\n'
+            help_text += f"• {module_name.title()}: {' '.join([f'<code>{prefix + cmd_name}</code>' for cmd_name in module.commands.keys()])}\n"
 
             if len(help_text) >= 2048:
                 result.append(help_text)
@@ -400,13 +424,9 @@ class ModuleHelp:
         help_text = f"<b>Help for command</b> <code>{prefix}{command.name}</code>\n"
         if command.aliases:
             help_text += "<b>Aliases:</b> "
-            help_text += (
-                f"{' '.join([f'<code>{prefix}{alias}</code>' for alias in command.aliases])}\n"
-            )
+            help_text += f"{' '.join([f'<code>{prefix}{alias}</code>' for alias in command.aliases])}\n"
 
-        help_text += (
-            f"\n<b>Module: {module.name}</b> (<code>{prefix}help {module.name}</code>)\n\n"
-        )
+        help_text += f"\n<b>Module: {module.name}</b> (<code>{prefix}help {module.name}</code>)\n\n"
         help_text += f"<code>{prefix}{command.name}"
 
         if command.args:
@@ -424,45 +444,6 @@ class ModuleHelp:
     @property
     def commands_count(self) -> int:
         return sum(len(module.commands) for module in self.modules.values())
-
-
-def get_entity_url(
-    entity: Union[User, Chat],
-    openmessage: bool = False,
-) -> str:
-    """
-    Get link to object, if available
-    :param entity: Entity to get url of
-    :param openmessage: Use tg://openmessage link for users
-    :return: Link to object or empty string
-    """
-    return (
-        (f"tg://openmessage?user_id={entity.id}" if openmessage else f"tg://user?id={entity.id}")
-        if isinstance(entity, User)
-        else (
-            f"tg://resolve?domain={entity.username}" if getattr(entity, "username", None) else ""
-        )
-    )
-
-
-def get_message_link(
-    message: Message,
-    chat: Optional[Chat] = None,
-) -> str:
-    """
-    Get link to message
-    :param message: Message to get link of
-    :param chat: Chat, where message was sent
-    :return: Link to message
-    """
-    if message.chat.type == ChatType.PRIVATE:
-        return f"tg://openmessage?user_id={message.chat.id}&message_id={message.id}"
-
-    return (
-        f"https://t.me/{chat.username}/{message.id}"
-        if getattr(chat, "username", False)
-        else f"https://t.me/c/{chat.id}/{message.id}"
-    )
 
 
 async def shell_exec(
@@ -486,185 +467,75 @@ async def shell_exec(
     return process.returncode, stdout.decode(), stderr.decode()
 
 
-class KClient(Client):
-    """Modified Pyrogram Client, the main means for interacting with Telegram.
+async def handle_restart(client: Client):
+    restart_info = db.get("core.updater", "restart_info")
 
-    Parameters:
-        name (``str``):
-            A name for the client, e.g.: "my_account".
+    if restart_info:
+        try:
+            if restart_info["type"] == "restart":
+                logging.info(
+                    f"{client.me.username}#{client.me.id} | Userbot succesfully restarted."
+                )
+                await client.edit_message_text(
+                    chat_id=restart_info["chat_id"],
+                    message_id=restart_info["message_id"],
+                    text=f"<code>Restarted in {perf_counter() - restart_info['time']:.3f}s...</code>",
+                )
+            elif restart_info["type"] == "update":
+                current_hash = git.Repo().head.commit.hexsha
+                git.Repo().remote("origin").fetch()
 
-        api_id (``int`` | ``str``, *optional*):
-            The *api_id* part of the Telegram API key, as integer or string.
-            E.g.: 12345 or "12345".
+                update_text = (
+                    f"Userbot succesfully updated from {restart_info['hash'][:7]} "
+                    f"to {current_hash[:7]} version."
+                )
 
-        api_hash (``str``, *optional*):
-            The *api_hash* part of the Telegram API key, as string.
-            E.g.: "0123456789abcdef0123456789abcdef".
+                logging.info(f"{client.me.username}#{client.me.id} | {update_text}.")
+                await client.edit_message_text(
+                    chat_id=restart_info["chat_id"],
+                    message_id=restart_info["message_id"],
+                    text=(
+                        f"<code>{update_text}.\n\n"
+                        f"Restarted in {perf_counter() - restart_info['time']:.3f}s...</code>"
+                    ),
+                )
+        except Exception:
+            print("Error when updating!")
+            traceback.print_exc()
 
-        app_version (``str``, *optional*):
-            Application version.
-            Defaults to "Pyrogram x.y.z".
-
-        device_model (``str``, *optional*):
-            Device model.
-            Defaults to *platform.python_implementation() + " " + platform.python_version()*.
-
-        system_version (``str``, *optional*):
-            Operating System version.
-            Defaults to *platform.system() + " " + platform.release()*.
-
-        lang_code (``str``, *optional*):
-            Code of the language used on the client, in ISO 639-1 standard.
-            Defaults to "en".
-
-        ipv6 (``bool``, *optional*):
-            Pass True to connect to Telegram using IPv6.
-            Defaults to False (IPv4).
-
-        proxy (``dict``, *optional*):
-            The Proxy settings as dict.
-            E.g.: *dict(scheme="socks5", hostname="11.22.33.44", port=1234, username="user", password="pass")*.
-            The *username* and *password* can be omitted if the proxy doesn't require authorization.
-
-        test_mode (``bool``, *optional*):
-            Enable or disable login to the test servers.
-            Only applicable for new sessions and will be ignored in case previously created sessions are loaded.
-            Defaults to False.
-
-        bot_token (``str``, *optional*):
-            Pass the Bot API token to create a bot session, e.g.: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
-            Only applicable for new sessions.
-
-        session_string (``str``, *optional*):
-            Pass a session string to load the session in-memory.
-            Implies ``in_memory=True``.
-
-        storage (:obj:`~pyrogram.storage.Storage`, *optional*):
-            Pass an instance of your own implementation of session storage engine.
-            Useful when you want to store your session in databases like Mongo, Redis, etc.
-
-        in_memory (``bool``, *optional*):
-            Pass True to start an in-memory session that will be discarded as soon as the client stops.
-            In order to reconnect again using an in-memory session without having to login again, you can use
-            :meth:`~pyrogram.Client.export_session_string` before stopping the client to get a session string you can
-            pass to the ``session_string`` parameter.
-            Defaults to False.
-
-        phone_number (``str``, *optional*):
-            Pass the phone number as string (with the Country Code prefix included) to avoid entering it manually.
-            Only applicable for new sessions.
-
-        phone_code (``str``, *optional*):
-            Pass the phone code as string (for test numbers only) to avoid entering it manually.
-            Only applicable for new sessions.
-
-        password (``str``, *optional*):
-            Pass the Two-Step Verification password as string (if required) to avoid entering it manually.
-            Only applicable for new sessions.
-
-        workers (``int``, *optional*):
-            Number of maximum concurrent workers for handling incoming updates.
-            Defaults to ``min(32, os.cpu_count() + 4)``.
-
-        workdir (``str``, *optional*):
-            Define a custom working directory.
-            The working directory is the location in the filesystem where Pyrogram will store the session files.
-            Defaults to the parent directory of the main script.
-
-        plugins (``dict``, *optional*):
-            Smart Plugins settings as dict, e.g.: *dict(root="plugins")*.
-
-        parse_mode (:obj:`~pyrogram.enums.ParseMode`, *optional*):
-            Set the global parse mode of the client. By default, texts are parsed using both Markdown and HTML styles.
-            You can combine both syntaxes together.
-
-        no_updates (``bool``, *optional*):
-            Pass True to disable incoming updates.
-            When updates are disabled the client can't receive messages or other updates.
-            Useful for batch programs that don't need to deal with updates.
-            Defaults to False (updates enabled and received).
-
-        takeout (``bool``, *optional*):
-            Pass True to let the client use a takeout session instead of a normal one, implies *no_updates=True*.
-            Useful for exporting Telegram data. Methods invoked inside a takeout session (such as get_chat_history,
-            download_media, ...) are less prone to throw FloodWait exceptions.
-            Only available for users, bots will ignore this parameter.
-            Defaults to False (normal session).
-
-        sleep_threshold (``int``, *optional*):
-            Set a sleep threshold for flood wait exceptions happening globally in this client instance, below which any
-            request that raises a flood wait will be automatically invoked again after sleeping for the required amount
-            of time. Flood wait exceptions requiring higher waiting times will be raised.
-            Defaults to 10 seconds.
-
-        hide_password (``bool``, *optional*):
-            Pass True to hide the password when typing it during the login.
-            Defaults to False, because ``getpass`` (the library used) is known to be problematic in some
-            terminal environments.
-
-        max_concurrent_transmissions (``bool``, *optional*):
-            Set the maximum amount of concurrent transmissions (uploads & downloads).
-            A value that is too high may result in network related issues.
-            Defaults to 1.
-    """
-
-    def __init__(
-        self,
-        name: str,
-        api_id: Union[int, str] = None,
-        api_hash: str = None,
-        app_version: str = Client.APP_VERSION,
-        device_model: str = Client.DEVICE_MODEL,
-        system_version: str = Client.SYSTEM_VERSION,
-        lang_code: str = Client.LANG_CODE,
-        ipv6: bool = False,
-        proxy: dict = None,
-        test_mode: bool = False,
-        bot_token: str = None,
-        session_string: str = None,
-        storage: Storage = None,
-        in_memory: bool = None,
-        phone_number: str = None,
-        phone_code: str = None,
-        password: str = None,
-        workers: int = Client.WORKERS,
-        workdir: str = Client.WORKDIR,
-        plugins: dict = None,
-        parse_mode: "enums.ParseMode" = enums.ParseMode.DEFAULT,
-        no_updates: bool = None,
-        takeout: bool = None,
-        sleep_threshold: int = Session.SLEEP_THRESHOLD,
-        hide_password: bool = False,
-        max_concurrent_transmissions: int = Client.MAX_CONCURRENT_TRANSMISSIONS,
-        huy: str = "huy",
-    ):
-        super().__init__(
-            name=name,
-            api_id=api_id,
-            api_hash=api_hash,
-            app_version=app_version,
-            device_model=device_model,
-            system_version=system_version,
-            lang_code=lang_code,
-            ipv6=ipv6,
-            proxy=proxy,
-            test_mode=test_mode,
-            bot_token=bot_token,
-            session_string=session_string,
-            storage=storage,
-            in_memory=in_memory,
-            phone_number=phone_number,
-            phone_code=phone_code,
-            password=password,
-            workers=workers,
-            workdir=workdir,
-            plugins=plugins,
-            parse_mode=parse_mode,
-            no_updates=no_updates,
-            takeout=takeout,
-            sleep_threshold=sleep_threshold,
-            hide_password=hide_password,
-            max_concurrent_transmissions=max_concurrent_transmissions,
+        db.remove("core.updater", "restart_info")
+    else:
+        logging.info(
+            f"{client.me.username}#{client.me.id} on {git.Repo().active_branch.name}"
+            f"@{git.Repo().head.commit.hexsha[:7]}"
+            " | Userbot succesfully started."
         )
 
-        self._db = ""
+
+def time_diff(dt: datetime.datetime) -> str:
+    now = datetime.datetime.now()
+    diff = dt - now
+
+    if diff.total_seconds() < 0:
+        diff = now - dt
+        if diff.days > 0:
+            return f"{diff.days} days ago"
+        elif diff.seconds >= 3600:
+            hours = diff.seconds // 3600
+            return f"{hours} hours ago"
+        elif diff.seconds >= 60:
+            minutes = diff.seconds // 60
+            return f"{minutes} minutes ago"
+        else:
+            return "just now"
+    else:
+        if diff.days > 0:
+            return f"in {diff.days} days"
+        elif diff.seconds >= 3600:
+            hours = diff.seconds // 3600
+            return f"in {hours} hours"
+        elif diff.seconds >= 60:
+            minutes = diff.seconds // 60
+            return f"in {minutes} minutes"
+        else:
+            return "soon"

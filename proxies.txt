@@ -1,0 +1,4 @@
+# Proxies in the following format:
+# SOCKS5 login:password@ip:port
+# or
+# HTTPS ip:port

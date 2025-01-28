@@ -1,7 +1,6 @@
-version: '3'
 services:
   worker:
-    container_name: "KurimuzonUserbot-worker"
+    container_name: "KurimuzonUserbot"
     build:
       context: .
     stop_signal: SIGINT

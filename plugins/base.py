@@ -1,9 +1,9 @@
+import datetime
 import os
 import subprocess
 import sys
 from time import perf_counter
 
-import arrow
 import git
 import pyrogram
 from pyrogram import Client, filters
@@ -11,20 +11,22 @@ from pyrogram.types import Message
 
 from utils.db import db
 from utils.filters import command
-from utils.misc import bot_uptime, modules_help
+from utils.misc import modules_help, uptime
 from utils.scripts import (
     format_exc,
     get_args,
     get_cpu_usage,
     get_prefix,
     get_ram_usage,
-    restart,
     shell_exec,
+    time_diff,
     with_args,
 )
 
 
-@Client.on_message(~filters.scheduled & command(["help", "h"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["help", "h"]) & filters.me & ~filters.forwarded
+)
 async def help_cmd(_, message: Message):
     args, _ = get_args(message)
     try:
@@ -38,14 +40,20 @@ async def help_cmd(_, message: Message):
                     await message.edit(text, disable_web_page_preview=True)
                     msg_edited = True
         elif args[0] in modules_help.modules:
-            await message.edit(modules_help.module_help(args[0]), disable_web_page_preview=True)
+            await message.edit(
+                modules_help.module_help(args[0]), disable_web_page_preview=True
+            )
         else:
-            await message.edit(modules_help.command_help(args[0]), disable_web_page_preview=True)
+            await message.edit(
+                modules_help.command_help(args[0]), disable_web_page_preview=True
+            )
     except ValueError as e:
         await message.edit(e)
 
 
-@Client.on_message(~filters.scheduled & command(["restart"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["restart"]) & filters.me & ~filters.forwarded
+)
 async def _restart(_: Client, message: Message):
     db.set(
         "core.updater",
@@ -58,10 +66,12 @@ async def _restart(_: Client, message: Message):
         },
     )
     await message.edit("<code>Restarting...</code>")
-    restart()
+    os.execvp(sys.executable, [sys.executable, *sys.argv])
 
 
-@Client.on_message(~filters.scheduled & command(["update"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["update"]) & filters.me & ~filters.forwarded
+)
 async def _update(_: Client, message: Message):
     await message.edit("<code>Updating...</code>")
     args, nargs = get_args(message)
@@ -122,11 +132,14 @@ async def _update(_: Client, message: Message):
         await message.edit(format_exc(e))
         db.remove("core.updater", "restart_info")
     else:
-        restart()
+        os.execvp(sys.executable, [sys.executable, *sys.argv])
 
 
 @Client.on_message(
-    ~filters.scheduled & command(["kprefix", "prefix"]) & filters.me & ~filters.forwarded
+    ~filters.scheduled
+    & command(["kprefix", "prefix"])
+    & filters.me
+    & ~filters.forwarded
 )
 async def set_prefix(_, message: Message):
     args, _ = get_args(message)
@@ -138,9 +151,8 @@ async def set_prefix(_, message: Message):
             f"To change prefix use <code>{prefix}{message.command[0]} [new prefix]</code>"
         )
 
-    _prefix = args[0]
-    db.set("core.main", "prefix", _prefix)
-    await message.edit(f"<b>Prefix changed to:</b> <code>{_prefix}</code>")
+    db.set("core.main", "prefix", args[0])
+    await message.edit(f"<b>Prefix changed to:</b> <code>{args[0]}</code>")
 
 
 @Client.on_message(
@@ -166,21 +178,11 @@ async def sendmod(client: Client, message: Message):
         await message.reply(format_exc(e), quote=False)
 
 
-@Client.on_message(~filters.scheduled & command(["status"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["status"]) & filters.me & ~filters.forwarded
+)
 async def _status(_, message: Message):
-    common_args, _ = get_args(message)
-
-    await message.edit("<code>Getting info...</code>")
-
-    prefix = get_prefix()
-    repo_link = "https://github.com/KurimuzonAkuma/Kurimuzon-Userbot"
-    dev_link = "https://t.me/KurimuzonAkuma"
-    cpu_usage = get_cpu_usage()
-    ram_usage = get_ram_usage()
-    current_time = arrow.get()
-    uptime = current_time.shift(seconds=perf_counter() - bot_uptime)
-    kernel_version = subprocess.run(["uname", "-a"], capture_output=True).stdout.decode().strip()
-    system_uptime = subprocess.run(["uptime", "-p"], capture_output=True).stdout.decode().strip()
+    args, _ = get_args(message)
 
     current_hash = git.Repo().head.commit.hexsha
     git.Repo().remote("origin").fetch()
@@ -190,28 +192,36 @@ async def _status(_, message: Message):
     current_version = upcoming_version - (
         len(list(git.Repo().iter_commits(f"{current_hash}..{upcoming}")))
     )
+    repo_link = "https://github.com/KurimuzonAkuma/Kurimuzon-Userbot"
 
-    result = (
-        f"<emoji id=5219903664428167948>🤖</emoji> <a href='{repo_link}'>Kurimuzon-Userbot</a> / "
-    )
+    result = f"<emoji id=5219903664428167948>🤖</emoji> <a href='{repo_link}'>Kurimuzon-Userbot</a> / "
     result += f"<a href='{repo_link}/commit/{current_hash}'>#{current_hash[:7]} ({current_version})</a>\n\n"
     result += f"<b>Pyrogram:</b> <code>{pyrogram.__version__}</code>\n"
     result += f"<b>Python:</b> <code>{sys.version}</code>\n"
-    result += f"<b>Dev:</b> <a href='{dev_link}'>KurimuzonAkuma</a>\n\n"
+    result += "<b>Dev:</b> <a href='https://t.me/KurimuzonAkuma'>KurimuzonAkuma</a>\n\n"
 
-    if "-a" not in common_args:
+    if "-a" not in args:
         return await message.edit(result, disable_web_page_preview=True)
 
-    result += "<b>Bot status:</b>\n"
-    result += (
-        f"├─<b>Uptime:</b> <code>{uptime.humanize(current_time, only_distance=True)}</code>\n"
+    await message.edit("<code>Getting info...</code>")
+
+    cpu_usage = get_cpu_usage()
+    ram_usage = get_ram_usage()
+    kernel_version = (
+        subprocess.run(["uname", "-a"], capture_output=True).stdout.decode().strip()
     )
+    system_uptime = (
+        subprocess.run(["uptime", "-p"], capture_output=True).stdout.decode().strip()
+    )
+
+    result += "<b>Bot status:</b>\n"
+    result += f"├─<b>Uptime:</b> <code>{time_diff(uptime)}</code>\n"
     result += f"├─<b>Branch:</b> <code>{branch}</code>\n"
     result += f"├─<b>Current version:</b> <a href='{repo_link}/commit/{current_hash}'>"
     result += f"#{current_hash[:7]} ({current_version})</a>\n"
     result += f"├─<b>Latest version:</b> <a href='{repo_link}/commit/{upcoming}'>"
     result += f"#{upcoming[:7]} ({upcoming_version})</a>\n"
-    result += f"├─<b>Prefix:</b> <code>{prefix}</code>\n"
+    result += f"├─<b>Prefix:</b> <code>{get_prefix()}</code>\n"
     result += f"├─<b>Modules:</b> <code>{modules_help.modules_count}</code>\n"
     result += f"└─<b>Commands:</b> <code>{modules_help.commands_count}</code>\n\n"
 
@@ -225,10 +235,23 @@ async def _status(_, message: Message):
     await message.edit(result, disable_web_page_preview=True)
 
 
+@Client.on_message(
+    ~filters.scheduled & command(["ping", "p"]) & filters.me & ~filters.forwarded
+)
+async def ping(_, message: Message):
+    start = perf_counter()
+    await message.edit("<b>Pong!</b>")
+    end = perf_counter()
+    await message.edit(f"<b>Pong! {round(end - start, 3)}s</b>")
+
+
 module = modules_help.add_module("base", __file__)
-module.add_command("help", "Get common/module/command help.", "[module/command name]", ["h"])
+module.add_command(
+    "help", "Get common/module/command help.", "[module/command name]", ["h"]
+)
 module.add_command("prefix", "Set custom prefix", None, ["kprefix"])
 module.add_command("restart", "Useful when you want to reload a bot")
 module.add_command("update", "Update the userbot from the repository")
 module.add_command("sendmod", "Send module to chat", "[module_name]", ["sm"])
 module.add_command("status", "Get information about the userbot and system", "[-a]")
+module.add_command("ping", "Check ping to Telegram servers", aliases=["p"])

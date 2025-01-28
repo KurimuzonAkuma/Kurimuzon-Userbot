@@ -2,9 +2,8 @@
     <br>
     <b>Kurimuzon-Userbot</b>
     <br>
-    <b>Telegram userbot inspired by <a href='https://github.com/Dragon-Userbot/Dragon-Userbot'><img alt="dragon" src="./dragon.png"/> Dragon-Userbot</a></b>
+    <b>Telegram userbot inspired by <a href='https://github.com/Dragon-Userbot/Dragon-Userbot'><img alt="dragon" src="assets/images/dragon.png"/> Dragon-Userbot</a></b>
     <br>
-    <img src="https://img.shields.io/badge/code%20style-black-000000.svg?style=for-the-badge" alt="Code style">
     <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/KurimuzonAkuma/Kurimuzon-Userbot?style=for-the-badge">
     <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/KurimuzonAkuma/Kurimuzon-Userbot?style=for-the-badge">
 </p>
@@ -35,41 +34,6 @@ apt-get update && apt-get upgrade -y && apt install git && git clone https://git
 Subsequent launch:
 <pre><code>cd Kurimuzon-Userbot/</code></pre>
 <pre><code>python3 main.py</code></pre>
-
-<h1>Custom modules</h1>
-
-<p>To add your module to the bot, create a pull request or put in manually in plugins folder.</p>
-
-```python3
-from pyrogram import Client, filters
-from pyrogram.types import Message
-
-from utils.misc import modules_help
-from utils.filters import command
-
-
-@Client.on_message(command("example_edit") & filters.me)
-async def example_edit(_: Client, message: Message):
-    await message.edit("<code>This is an example module</code>")
-
-
-@Client.on_message(command("example_send") & filters.me)
-async def example_send(client: Client, message: Message):
-    await client.send_message(message.chat.id, "<b>This is an example module</b>")
-
-
-# This adds instructions for your module
-modules_help["example"] = {
-    "example_send": "example send",
-    "example_edit": "example edit",
-}
-
-# modules_help["example"] = { "example_send [text]": "example send" }
-#                  |            |              |        |
-#                  |            |              |        └─ command description
-#           module_name         command_name   └─ optional command arguments
-#        (only snake_case)   (only snake_case too)
-```
 
 <h2>Credits</h2>
 <nav>

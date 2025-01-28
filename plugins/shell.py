@@ -1,5 +1,6 @@
 import asyncio
 import html
+import os
 import shutil
 from time import perf_counter
 
@@ -12,7 +13,9 @@ from utils.misc import modules_help
 from utils.scripts import get_args, get_args_raw, shell_exec, with_args
 
 
-@Client.on_message(~filters.scheduled & command(["shell", "sh"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["shell", "sh"]) & filters.me & ~filters.forwarded
+)
 @with_args("<b>Command is not provided</b>")
 async def shell_handler(_: Client, message: Message):
     await message.edit("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
@@ -62,7 +65,7 @@ async def shell_config_handler(_: Client, message: Message):
     timeout = nargs.get("-t")
 
     if executable:
-        if not shutil.which(executable):
+        if not shutil.which(executable) and not os.access(executable, os.X_OK):
             return await message.edit_text("-e should be executable path")
         db.set("shell", "executable", executable)
 

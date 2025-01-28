@@ -6,17 +6,17 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from time import perf_counter
 from traceback import print_exc
-
-from pyrogram import Client, enums, filters
+import random
+from pyrogram import Client, enums, filters, raw, types
 from pyrogram.types import Message
 
 from utils.db import db
 from utils.filters import command
 from utils.misc import modules_help
-from utils.scripts import paste_neko, shell_exec
+from utils.scripts import paste_yaso, shell_exec
 
 
-async def aexec(code, *args, timeout=None):
+async def aexec(code, client, message, timeout=None):
     exec(
         "async def __todo(client, message, *args):\n"
         + " from pyrogram import raw, types, enums\n"
@@ -32,8 +32,9 @@ async def aexec(code, *args, timeout=None):
     )
 
     f = StringIO()
+
     with redirect_stdout(f):
-        await asyncio.wait_for(locals()["__todo"](*args), timeout=timeout)
+        await asyncio.wait_for(locals()["__todo"](client, message), timeout=timeout)
 
     return f.getvalue()
 
@@ -47,7 +48,9 @@ code_result = (
 )
 
 
-@Client.on_message(~filters.scheduled & command(["py", "rpy"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["py", "rpy"]) & filters.me & ~filters.forwarded
+)
 async def python_exec(client: Client, message: Message):
     if len(message.command) == 1 and message.command[0] != "rpy":
         return await message.edit_text("<b>Code to execute isn't provided</b>")
@@ -58,30 +61,40 @@ async def python_exec(client: Client, message: Message):
 
         # Check if message is a reply to message with already executed code
         for entity in message.reply_to_message.entities:
-            if entity.type == enums.MessageEntityType.PRE and entity.language == "python":
-                code = message.reply_to_message.text[entity.offset : entity.offset + entity.length]
+            if (
+                entity.type == enums.MessageEntityType.PRE
+                and entity.language == "python"
+            ):
+                code = message.reply_to_message.text[
+                    entity.offset : entity.offset + entity.length
+                ]
                 break
         else:
             code = message.reply_to_message.text
     else:
         code = message.text.split(maxsplit=1)[1]
 
-    await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
+    await message.edit_text(
+        "<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>"
+    )
 
     try:
-        code = code.replace("\u00A0", "")
+        code = code.replace("\u00a0", "")
 
         start_time = perf_counter()
-        result = await aexec(code, client, message, timeout=db.get("shell", "timeout", 60))
+        result = await aexec(
+            code, client, message, timeout=db.get("shell", "timeout", 60)
+        )
         stop_time = perf_counter()
 
         # Replace account phone number to anonymous
-        result = result.replace(client.me.phone_number, "88806524973")
+        random_phone_number = "".join(str(random.randint(0, 9)) for _ in range(8))
+        result = result.replace(client.me.phone_number, f"888{random_phone_number}")
 
         if not result:
             result = "No result"
         elif len(result) > 3072:
-            paste_result = html.escape(await paste_neko(result))
+            paste_result = html.escape(await paste_yaso(result))
 
             if paste_result == "Pasting failed":
                 with open("error.log", "w") as file:
@@ -144,13 +157,15 @@ async def python_exec(client: Client, message: Message):
                 pre_language="python",
                 code=html.escape(code),
                 result=f"<b><emoji id=5465665476971471368>❌</emoji> {e.__class__.__name__}: {e}</b>\n"
-                f"Traceback: {html.escape(await paste_neko(err.getvalue()))}",
+                f"Traceback: {html.escape(await paste_yaso(err.getvalue()))}",
             ),
             disable_web_page_preview=True,
         )
 
 
-@Client.on_message(~filters.scheduled & command(["gcc", "rgcc"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["gcc", "rgcc"]) & filters.me & ~filters.forwarded
+)
 async def gcc_exec(_: Client, message: Message):
     if len(message.command) == 1 and message.command[0] != "rgcc":
         return await message.edit_text("<b>Code to execute isn't provided</b>")
@@ -160,7 +175,9 @@ async def gcc_exec(_: Client, message: Message):
     else:
         code = message.text.split(maxsplit=1)[1]
 
-    await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
+    await message.edit_text(
+        "<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>"
+    )
 
     with tempfile.TemporaryDirectory() as tempdir:
         with tempfile.NamedTemporaryFile("w+", suffix=".c", dir=tempdir) as file:
@@ -222,10 +239,12 @@ async def gcc_exec(_: Client, message: Message):
                         disable_web_page_preview=True,
                     )
 
+                result = None
+
                 if len(stdout) > 3072:
-                    result = html.escape(await paste_neko(stdout))
+                    result = html.escape(await paste_yaso(stdout))
                 else:
-                    result = f"<pre>{html.escape(result)}</pre>"
+                    result = f"<pre>{html.escape(stdout)}</pre>"
 
                 return await message.edit_text(
                     code_result.format(
@@ -242,7 +261,9 @@ async def gcc_exec(_: Client, message: Message):
                 )
 
 
-@Client.on_message(~filters.scheduled & command(["gpp", "rgpp"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["gpp", "rgpp"]) & filters.me & ~filters.forwarded
+)
 async def gpp_exec(_: Client, message: Message):
     if len(message.command) == 1 and message.command[0] != "rgpp":
         return await message.edit_text("<b>Code to execute isn't provided</b>")
@@ -252,7 +273,9 @@ async def gpp_exec(_: Client, message: Message):
     else:
         code = message.text.split(maxsplit=1)[1]
 
-    await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
+    await message.edit_text(
+        "<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>"
+    )
 
     with tempfile.TemporaryDirectory() as tempdir:
         with tempfile.NamedTemporaryFile("w+", suffix=".cpp", dir=tempdir) as file:
@@ -315,7 +338,7 @@ async def gpp_exec(_: Client, message: Message):
                     )
 
                 if len(stdout) > 3072:
-                    result = html.escape(await paste_neko(stdout))
+                    result = html.escape(await paste_yaso(stdout))
                 else:
                     result = f"<pre>{html.escape(result)}</pre>"
 
@@ -334,7 +357,9 @@ async def gpp_exec(_: Client, message: Message):
                 )
 
 
-@Client.on_message(~filters.scheduled & command(["lua", "rlua"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["lua", "rlua"]) & filters.me & ~filters.forwarded
+)
 async def lua_exec(_: Client, message: Message):
     if len(message.command) == 1 and message.command[0] != "rlua":
         return await message.edit_text("<b>Code to execute isn't provided</b>")
@@ -344,7 +369,9 @@ async def lua_exec(_: Client, message: Message):
     else:
         code = message.text.split(maxsplit=1)[1]
 
-    await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
+    await message.edit_text(
+        "<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>"
+    )
 
     with tempfile.TemporaryDirectory() as tempdir:
         with tempfile.NamedTemporaryFile("w+", suffix=".lua", dir=tempdir) as file:
@@ -386,7 +413,7 @@ async def lua_exec(_: Client, message: Message):
                     )
 
                 if len(stdout) > 3072:
-                    result = html.escape(await paste_neko(stdout))
+                    result = html.escape(await paste_yaso(stdout))
                 else:
                     result = f"<pre>{html.escape(result)}</pre>"
 
@@ -404,7 +431,9 @@ async def lua_exec(_: Client, message: Message):
                 )
 
 
-@Client.on_message(~filters.scheduled & command(["go", "rgo"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["go", "rgo"]) & filters.me & ~filters.forwarded
+)
 async def go_exec(_: Client, message: Message):
     if len(message.command) == 1 and message.command[0] != "rgo":
         return await message.edit_text("<b>Code to execute isn't provided</b>")
@@ -414,7 +443,9 @@ async def go_exec(_: Client, message: Message):
     else:
         code = message.text.split(maxsplit=1)[1]
 
-    await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
+    await message.edit_text(
+        "<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>"
+    )
 
     with tempfile.TemporaryDirectory() as tempdir:
         with tempfile.NamedTemporaryFile("w+", suffix=".go", dir=tempdir) as file:
@@ -456,7 +487,7 @@ async def go_exec(_: Client, message: Message):
                     )
 
                 if len(stdout) > 3072:
-                    result = html.escape(await paste_neko(stdout))
+                    result = html.escape(await paste_yaso(stdout))
                 else:
                     result = f"<pre>{html.escape(result)}</pre>"
 
@@ -486,7 +517,9 @@ async def node_exec(_: Client, message: Message):
     else:
         code = message.text.split(maxsplit=1)[1]
 
-    await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
+    await message.edit_text(
+        "<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>"
+    )
 
     with tempfile.TemporaryDirectory() as tempdir:
         with tempfile.NamedTemporaryFile("w+", suffix=".js", dir=tempdir) as file:
@@ -528,7 +561,7 @@ async def node_exec(_: Client, message: Message):
                     )
 
                 if len(stdout) > 3072:
-                    result = html.escape(await paste_neko(stdout))
+                    result = html.escape(await paste_yaso(stdout))
                 else:
                     result = f"<pre>{html.escape(result)}</pre>"
 

@@ -44,14 +44,14 @@ def command(commands: Union[str, List[str]], case_sensitive: bool = False):
 
             for cmd in flt.commands:
                 if not re.match(
-                    f"^(?:{cmd}(?:@?{username})?)(?:\s|$)",
+                    rf"^(?:{cmd}(?:@?{username})?)(?:\s|$)",
                     without_prefix,
                     flags=0 if flt.case_sensitive else re.IGNORECASE,
                 ):
                     continue
 
                 without_command = re.sub(
-                    f"{cmd}(?:@?{username})?\s?",
+                    rf"{cmd}(?:@?{username})?\s?",
                     "",
                     without_prefix,
                     count=1,
@@ -74,7 +74,9 @@ def command(commands: Union[str, List[str]], case_sensitive: bool = False):
     commands = commands if isinstance(commands, list) else [commands]
     commands = {c if case_sensitive else c.lower() for c in commands}
 
-    return create(func, "CommandFilter", commands=commands, case_sensitive=case_sensitive)
+    return create(
+        func, "CommandFilter", commands=commands, case_sensitive=case_sensitive
+    )
 
 
 class startswith(Filter, set):
@@ -112,7 +114,9 @@ class viabot(Filter, set):
     def __init__(self, bots: Union[int, str, List[Union[int, str]]] = None):
         bots = [] if bots is None else bots if isinstance(bots, list) else [bots]
 
-        super().__init__(bot.lower().strip("@") if isinstance(bot, str) else bot for bot in bots)
+        super().__init__(
+            bot.lower().strip("@") if isinstance(bot, str) else bot for bot in bots
+        )
 
     async def __call__(self, _, message: Message):
         return message.via_bot and (

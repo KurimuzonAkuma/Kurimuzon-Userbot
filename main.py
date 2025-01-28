@@ -2,27 +2,24 @@ import asyncio
 import contextlib
 import logging
 import os
+import pathlib
 import platform
-from time import perf_counter
-from traceback import print_exc
 
 import git
-from pyrogram import Client, idle
-from pyrogram.enums import ParseMode
+from pyrogram import enums, idle
 
-from utils import config
-from utils.db import db
-from utils.misc import scheduler, scheduler_jobs, script_path
-from utils.scripts import CustomFormatter
+from utils.client import CustomClient
+from utils.misc import env, scheduler, scheduler_jobs
+from utils.scripts import Formatter, get_proxy, handle_restart
+from utils.storage import FernetStorage
 
-if script_path != os.getcwd():
-    os.chdir(script_path)
+os.chdir(pathlib.Path(__file__).parent)
 
 
 async def main():
     stdout_handler = logging.StreamHandler()
     stdout_handler.setFormatter(
-        CustomFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     )
 
     logging.basicConfig(
@@ -31,25 +28,28 @@ async def main():
         handlers=[stdout_handler],
     )
 
-    app = Client(
+    app = CustomClient(
         "KurimuzonUserbot",
-        api_hash=config.api_hash,
-        api_id=config.api_id,
-        device_model="HUAWEISTK-LX1",
-        system_version="SDK 29",
-        app_version="10.5.0 (42285)",
-        lang_pack="android",
-        lang_code="jabka",
+        api_id=env.int("API_ID", 6),
+        api_hash=env.str("API_HASH", "eb06d4abfb49dc3eeb1aeb98ae0f581e"),
+        device_model=env.str("DEVICE_MODEL", "Samsung SM-S931B"),
+        system_version=env.str("SYSTEM_VERSION", "15 (35)"),
+        app_version=env.str("APP_VERSION", "11.7.0 (56631)"),
+        lang_pack=env.str("LANG_PACK", "android"),
+        lang_code=env.str("LANG_CODE", "jabka"),
         hide_password=True,
         plugins=dict(root="plugins"),
-        sleep_threshold=30,
-        workdir=script_path,
-        parse_mode=ParseMode.HTML,
+        sleep_threshold=10,
+        workdir=pathlib.Path(__file__).parent,
+        parse_mode=enums.ParseMode.HTML,
         skip_updates=False,
-        **config.proxy_settings,
+        proxy=get_proxy(),
     )
 
-    await app.start()
+    # For security purposes
+    app.storage = FernetStorage(client=app, key=bytes(env.str("FERNET_KEY"), "utf-8"))
+
+    await app.start(use_qr=True)
 
     async for _ in app.get_dialogs(limit=100):
         pass
@@ -68,44 +68,7 @@ async def main():
         repo.heads.master.set_tracking_branch(origin.refs.master)
         repo.heads.master.checkout(True)
 
-    if updater := db.get("core.updater", "restart_info"):
-        try:
-            if updater["type"] == "restart":
-                logging.info(f"{app.me.username}#{app.me.id} | Userbot succesfully restarted.")
-                await app.edit_message_text(
-                    chat_id=updater["chat_id"],
-                    message_id=updater["message_id"],
-                    text=f"<code>Restarted in {perf_counter() - updater['time']:.3f}s...</code>",
-                )
-            elif updater["type"] == "update":
-                current_hash = git.Repo().head.commit.hexsha
-                git.Repo().remote("origin").fetch()
-
-                update_text = (
-                    f"Userbot succesfully updated from {updater['hash'][:7]} "
-                    f"to {current_hash[:7]} version."
-                )
-
-                logging.info(f"{app.me.username}#{app.me.id} | {update_text}.")
-                await app.edit_message_text(
-                    chat_id=updater["chat_id"],
-                    message_id=updater["message_id"],
-                    text=(
-                        f"<code>{update_text}.\n\n"
-                        f"Restarted in {perf_counter() - updater['time']:.3f}s...</code>"
-                    ),
-                )
-        except Exception:
-            print("Error when updating!")
-            print_exc()
-
-        db.remove("core.updater", "restart_info")
-    else:
-        logging.info(
-            f"{app.me.username}#{app.me.id} on {git.Repo().active_branch.name}"
-            f"@{git.Repo().head.commit.hexsha[:7]}"
-            " | Userbot succesfully started."
-        )
+    await handle_restart(app)
 
     for job in scheduler_jobs:
         scheduler.add_job(
@@ -127,12 +90,13 @@ if __name__ == "__main__":
     with contextlib.suppress(KeyboardInterrupt, SystemExit):
         if platform.system() == "Windows":
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        try:
-            import uvloop
+        else:
+            try:
+                import uvloop
 
-            uvloop.install()
-        except ImportError:
-            logging.warning("uvloop not installed.\nInstall with: pip install uvloop")
+                uvloop.install()
+            except ImportError:
+                logging.warning("uvloop not installed.")
 
         if platform.python_version_tuple() >= ("3", "11"):
             with asyncio.Runner() as runner:
