@@ -14,7 +14,7 @@ COPY . /app
 WORKDIR /app
 
 RUN pip3 install --upgrade pip setuptools wheel
-RUN pip3 install --no-warn-script-location --no-cache-dir -U -r requirements.txt
+RUN pip3 install --no-warn-script-location --no-cache-dir -U uvloop -r requirements.txt
 
 ENV TZ=Europe/Moscow
 

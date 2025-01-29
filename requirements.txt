@@ -1,4 +1,3 @@
-aiocache
 aiohttp
 apscheduler
 environs

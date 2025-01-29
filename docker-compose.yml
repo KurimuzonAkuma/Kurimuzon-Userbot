@@ -6,7 +6,5 @@ services:
     stop_signal: SIGINT
     restart: unless-stopped
     command: "python3 main.py"
-    ports:
-      - "${EXTERNAL_PORT:-8080}:8080"
     volumes:
       - .:/app

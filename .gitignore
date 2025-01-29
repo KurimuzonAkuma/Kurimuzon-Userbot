@@ -1,0 +1,13 @@
+.env
+.ruff_cache
+.vscode
+__pycache__
+
+*.db
+*.session
+*.session-journal
+screenlog.0
+
+custom_modules/
+downloads/
+*.py1

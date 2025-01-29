@@ -1,19 +1,13 @@
 #!/usr/bin/env sh
 
-# Error codes:
-# 2 -
-# 3 -
-
 install_termux_dependencies() {
     termux-wake-lock
 
     pkg update -y && pkg upgrade -y
     pkg install python3 git clang ffmpeg wget libjpeg-turbo libcrypt ndk-sysroot zlib openssl -y || exit 2
 
-    python3 -m pip install -U pip
     export LDFLAGS="-L${PREFIX}/lib/"
     export CFLAGS="-I${PREFIX}/include/"
-    pip3 install -U pip wheel setuptools
 }
 
 install_linux_dependencies() {
@@ -23,8 +17,12 @@ install_linux_dependencies() {
     fi
 
     apt update -y
-    apt install python3 git ffmpeg  -y || exit 2
+    apt install python3 git -y || exit 2
+}
+
+install_python_dependencies() {
     python3 -m pip install -U pip wheel setuptools
+    python3 -m pip install -U -r requirements.txt
 }
 
 clone_repo() {
@@ -34,8 +32,6 @@ clone_repo() {
         git clone https://github.com/KurimuzonAkuma/Kurimuzon-Userbot || exit 2
         cd Kurimuzon-Userbot || exit 2
     fi
-
-    python3 -m pip install -U -r requirements.txt || exit 2
 
     if [ -f ".env" ] && [ -f "KurimuzonUserbot.session" ]; then
         printf "It seems that Kurimuzon-Userbot is already installed.\n"
@@ -60,6 +56,9 @@ configure_env() {
     fi
 
     cat > .env << EOL
+FERNET_KEY="$(python3 -c "import base64; import os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")"
+
+# Connection settings
 API_ID=${api_id}
 API_HASH="${api_hash}"
 DEVICE_MODEL=
@@ -161,8 +160,8 @@ install_docker() {
 install_docker_service() {
     install_docker
 
-    printf "\e[0;32mBuilding docker image...\e[0m"
-    sudo docker compose up -d --build
+    printf "\e[0;32mBuilding docker image\e[0m"
+    sudo docker compose up -d --build 1>/dev/null 2>&1
     printf "\e[0;32m - success\e[0m\n"
 
     echo
@@ -173,13 +172,14 @@ install_docker_service() {
     printf 'Stop with: \e[0;36mdocker stop KurimuzonUserbot\e[0m\n'
     echo "Process name: KurimuzonUserbot"
     echo "============================"
-    printf '\e[0;31mTo check container logs use: \e[0;36mdocker logs KurimuzonUserbot\e[0m\n'
+    printf 'To continue installation use: \e[0;36mdocker attach KurimuzonUserbot\e[0m\n'
 }
 
 main () {
     # Install dependencies
     if [ -x "$(command -v termux-setup-storage)" ]; then
         install_termux_dependencies
+        install_python_dependencies
     else
         install_linux_dependencies
     fi
@@ -211,14 +211,18 @@ main () {
         case $install_type in
             1)
                 install_systemd_service
+                install_python_dependencies
             ;;
             2)
                 install_pm2
+                install_python_dependencies
             ;;
             3)
                 install_docker_service
             ;;
             *)
+                install_python_dependencies
+
                 echo
                 echo "============================"
                 echo "Great! Kurimuzon-Userbot installed successfully!"
