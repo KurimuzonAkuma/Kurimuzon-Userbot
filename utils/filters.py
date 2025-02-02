@@ -3,7 +3,7 @@ from typing import List, Union
 
 from pyrogram import Client
 from pyrogram.filters import Filter, create
-from pyrogram.types import Message
+from pyrogram.types import Message, Story
 
 from utils.scripts import get_prefix
 
@@ -123,3 +123,17 @@ class viabot(Filter, set):
             message.via_bot.id in self
             or (message.via_bot.username and message.via_bot.username.lower() in self)
         )
+
+
+async def story_edited_filter(_, __, story: Story):
+    return bool(story.edited)
+
+
+story_edited = create(story_edited_filter)
+
+
+async def story_deleted_filter(_, __, story: Story):
+    return bool(story.deleted)
+
+
+story_deleted = create(story_deleted_filter)

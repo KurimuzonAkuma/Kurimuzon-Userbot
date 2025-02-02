@@ -3,8 +3,10 @@ import datetime
 import logging
 import os
 import random
+import re
 import shlex
 import string
+import time
 import traceback
 from time import perf_counter
 from typing import Dict, List, Optional, Tuple, Union
@@ -14,8 +16,7 @@ import git
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from pyrogram import Client, errors
-from pyrogram.enums import ChatType
-from pyrogram.types import Chat, Message, User
+from pyrogram.types import Message
 
 from utils.db import db
 
@@ -539,3 +540,76 @@ def time_diff(dt: datetime.datetime) -> str:
             return f"in {minutes} minutes"
         else:
             return "soon"
+
+
+class TTLMemoryCache:
+    def __init__(self, default_ttl: Optional[float] = None, capacity: int = 1000):
+        self.data = {}
+        self.default_ttl = default_ttl
+        self.capacity = capacity
+
+    def __str__(self):
+        self._cleanup()
+        return str(self.data)
+
+    def __contains__(self, key):
+        self._cleanup()
+        return key in self.data
+
+    def _cleanup(self):
+        current_time = time.time()
+        expired_keys = [
+            key
+            for key, data in self.data.items()
+            if data.get("ttl") is not None and data["expiry_time"] < current_time
+        ]
+        for key in expired_keys:
+            del self.data[key]
+
+    def set(self, key, value, ttl=None):
+        self._cleanup()
+        ttl = ttl or self.default_ttl
+        self.data[key] = {
+            "value": value,
+            "ttl": ttl,
+            "expiry_time": (time.time() + ttl) if ttl is not None else None,
+        }
+
+        if len(self.data) > self.capacity:
+            for _ in range(self.capacity // 2 + 1):
+                del self.data[next(iter(self.data))]
+
+    def get(self, key, default=None):
+        self._cleanup()
+        return self.data.get(key, {}).get("value", default)
+
+    def delete(self, key):
+        self._cleanup()
+        try:
+            del self.data[key]
+        except KeyError:
+            return False
+        return True
+
+
+def convert_tags(text: str) -> str:
+    """Convert pyrogram html tags to aiogram html tags."""
+    if text is None:
+        return ""
+
+    if hasattr(text, "html"):
+        text = text.html
+
+    patterns = (
+        (r"<spoiler>(.*?)</spoiler>", r"<tg-spoiler>\1</tg-spoiler>"),
+        (r'<emoji id="(\d+)">(.*?)</emoji>', r'<tg-emoji emoji-id="\1">\2</tg-emoji>'),
+        (
+            r'<pre language="([^"]+)">([^<]+)</pre>',
+            r'<pre><code class="language-\1">\2</code></pre>',
+        ),
+    )
+
+    for pattern, replacement in patterns:
+        text = re.sub(pattern, replacement, text)
+
+    return text
