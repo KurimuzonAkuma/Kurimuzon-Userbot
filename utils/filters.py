@@ -137,3 +137,15 @@ async def story_deleted_filter(_, __, story: Story):
 
 
 story_deleted = create(story_deleted_filter)
+
+def ttl_media_filter(_, __, message: Message) -> bool:
+    if not message.media:
+        return False
+
+    return bool(
+        getattr(
+            getattr(message, message.media.value, None), "ttl_seconds", None
+        )
+    )
+
+ttl_media = create(ttl_media_filter)
