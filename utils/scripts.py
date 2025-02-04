@@ -613,3 +613,29 @@ def convert_tags(text: str) -> str:
         text = re.sub(pattern, replacement, text)
 
     return text
+
+
+def parse_duration(duration_str: str) -> int:
+    match = re.match(r"^(\d+)([smhdwy]|mo)$", duration_str)
+    if not match:
+        return None
+
+    value, unit = match.groups()
+    value = int(value)
+
+    if unit == "s":
+        return value
+    elif unit == "m":
+        return value * 60
+    elif unit == "h":
+        return value * 3600
+    elif unit == "d":
+        return value * 86400
+    elif unit == "w":
+        return value * 604800
+    elif unit == "mo":
+        return value * 2592000  # 30 дней в месяц
+    elif unit == "y":
+        return value * 31536000  # 365 дней в год
+    else:
+        return None
