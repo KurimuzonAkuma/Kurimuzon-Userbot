@@ -37,6 +37,7 @@ async def main():
         app_version=env.str("APP_VERSION", None) or "11.7.0 (56631)",
         lang_pack=env.str("LANG_PACK", None) or "android",
         lang_code=env.str("LANG_CODE", None) or "jabka",
+        platform=enums.ClientPlatform.ANDROID,
         hide_password=True,
         plugins=dict(root="plugins"),
         sleep_threshold=10,
