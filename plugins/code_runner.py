@@ -8,7 +8,7 @@ from time import perf_counter
 from traceback import print_exc
 import random
 from pyrogram import Client, enums, filters, raw, types
-from pyrogram.types import Message
+from pyrogram.types import Message, LinkPreviewOptions
 
 from utils.db import db
 from utils.filters import command
@@ -120,7 +120,7 @@ async def python_exec(client: Client, message: Message):
                     f"{result}\n"
                     f"<b>Completed in {round(stop_time - start_time, 5)}s.</b>",
                 ),
-                disable_web_page_preview=True,
+                link_preview_options=LinkPreviewOptions(is_disabled=True),
             )
         else:
             return await message.reply_document(
@@ -143,7 +143,7 @@ async def python_exec(client: Client, message: Message):
                 code=html.escape(code),
                 result="<b><emoji id=5465665476971471368>❌</emoji> Timeout Error!</b>",
             ),
-            disable_web_page_preview=True,
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
     except Exception as e:
         err = StringIO()
@@ -159,7 +159,7 @@ async def python_exec(client: Client, message: Message):
                 result=f"<b><emoji id=5465665476971471368>❌</emoji> {e.__class__.__name__}: {e}</b>\n"
                 f"Traceback: {html.escape(await paste_yaso(err.getvalue()))}",
             ),
-            disable_web_page_preview=True,
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
 
 
@@ -204,7 +204,7 @@ async def gcc_exec(_: Client, message: Message):
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Compilation error with status code {rcode}:</b>\n"
                             f"<code>{html.escape(stderr)}</code>\n\n<b>Compiled in {round(comp_stop_time - comp_start_time, 5)}s.</b>\n",
                         ),
-                        disable_web_page_preview=True,
+                        link_preview_options=LinkPreviewOptions(is_disabled=True),
                     )
 
                 exec_start_time = perf_counter()
@@ -223,7 +223,7 @@ async def gcc_exec(_: Client, message: Message):
                         code=html.escape(code),
                         result=f"<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n<b>Timeout expired ({timeout} seconds)</b>",
                     ),
-                    disable_web_page_preview=True,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
                 )
             else:
                 if stderr:
@@ -236,7 +236,7 @@ async def gcc_exec(_: Client, message: Message):
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Error with status code {rcode}:</b>\n"
                             f"<code>{html.escape(stderr)}</code>",
                         ),
-                        disable_web_page_preview=True,
+                        link_preview_options=LinkPreviewOptions(is_disabled=True),
                     )
 
                 result = None
@@ -257,7 +257,7 @@ async def gcc_exec(_: Client, message: Message):
                         f"<b>Compiled in {round(comp_stop_time - comp_start_time, 5)}s.</b>\n"
                         f"<b>Completed in {round(exec_stop_time - exec_start_time, 5)}s.</b>",
                     ),
-                    disable_web_page_preview=True,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
                 )
 
 
@@ -302,7 +302,7 @@ async def gpp_exec(_: Client, message: Message):
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Compilation error with status code {rcode}:</b>\n"
                             f"<code>{html.escape(stderr)}</code>\n\n<b>Compiled in {round(comp_stop_time - comp_start_time, 5)}s.</b>\n",
                         ),
-                        disable_web_page_preview=True,
+                        link_preview_options=LinkPreviewOptions(is_disabled=True),
                     )
 
                 exec_start_time = perf_counter()
@@ -321,7 +321,7 @@ async def gpp_exec(_: Client, message: Message):
                         code=html.escape(code),
                         result=f"<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n<b>Timeout expired ({timeout} seconds)</b>",
                     ),
-                    disable_web_page_preview=True,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
                 )
             else:
                 if stderr:
@@ -334,13 +334,13 @@ async def gpp_exec(_: Client, message: Message):
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Error with status code {rcode}:</b>\n"
                             f"<code>{html.escape(stderr)}</code>",
                         ),
-                        disable_web_page_preview=True,
+                        link_preview_options=LinkPreviewOptions(is_disabled=True),
                     )
 
                 if len(stdout) > 3072:
                     result = html.escape(await paste_yaso(stdout))
                 else:
-                    result = f"<pre>{html.escape(result)}</pre>"
+                    result = f"<pre>{html.escape(stdout)}</pre>"
 
                 return await message.edit_text(
                     code_result.format(
@@ -353,7 +353,7 @@ async def gpp_exec(_: Client, message: Message):
                         f"<b>Compiled in {round(comp_stop_time - comp_start_time, 5)}s.</b>\n"
                         f"<b>Completed in {round(exec_stop_time - exec_start_time, 5)}s.</b>",
                     ),
-                    disable_web_page_preview=True,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
                 )
 
 
@@ -396,7 +396,7 @@ async def lua_exec(_: Client, message: Message):
                         code=html.escape(code),
                         result=f"<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n<b>Timeout expired ({timeout} seconds)</b>",
                     ),
-                    disable_web_page_preview=True,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
                 )
             else:
                 if stderr:
@@ -409,13 +409,13 @@ async def lua_exec(_: Client, message: Message):
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Error with status code {rcode}:</b>\n"
                             f"<code>{html.escape(stderr)}</code>",
                         ),
-                        disable_web_page_preview=True,
+                        link_preview_options=LinkPreviewOptions(is_disabled=True),
                     )
 
                 if len(stdout) > 3072:
                     result = html.escape(await paste_yaso(stdout))
                 else:
-                    result = f"<pre>{html.escape(result)}</pre>"
+                    result = f"<pre>{html.escape(stdout)}</pre>"
 
                 return await message.edit_text(
                     code_result.format(
@@ -427,7 +427,7 @@ async def lua_exec(_: Client, message: Message):
                         f"{result}\n\n"
                         f"<b>Completed in {round(exec_stop_time - exec_start_time, 5)}s.</b>",
                     ),
-                    disable_web_page_preview=True,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
                 )
 
 
@@ -470,7 +470,7 @@ async def go_exec(_: Client, message: Message):
                         code=html.escape(code),
                         result=f"<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n<b>Timeout expired ({timeout} seconds)</b>",
                     ),
-                    disable_web_page_preview=True,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
                 )
             else:
                 if stderr:
@@ -483,13 +483,13 @@ async def go_exec(_: Client, message: Message):
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Error with status code {rcode}:</b>\n"
                             f"<code>{html.escape(stderr)}</code>",
                         ),
-                        disable_web_page_preview=True,
+                        link_preview_options=LinkPreviewOptions(is_disabled=True),
                     )
 
                 if len(stdout) > 3072:
                     result = html.escape(await paste_yaso(stdout))
                 else:
-                    result = f"<pre>{html.escape(result)}</pre>"
+                    result = f"<pre>{html.escape(stdout)}</pre>"
 
                 return await message.edit_text(
                     code_result.format(
@@ -501,7 +501,7 @@ async def go_exec(_: Client, message: Message):
                         f"{result}\n\n"
                         f"<b>Completed in {round(exec_stop_time - exec_start_time, 5)}s.</b>",
                     ),
-                    disable_web_page_preview=True,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
                 )
 
 
@@ -544,7 +544,7 @@ async def node_exec(_: Client, message: Message):
                         code=html.escape(code),
                         result=f"<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n<b>Timeout expired ({timeout} seconds)</b>",
                     ),
-                    disable_web_page_preview=True,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
                 )
             else:
                 if stderr:
@@ -557,13 +557,13 @@ async def node_exec(_: Client, message: Message):
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Error with status code {rcode}:</b>\n"
                             f"<code>{html.escape(stderr)}</code>",
                         ),
-                        disable_web_page_preview=True,
+                        link_preview_options=LinkPreviewOptions(is_disabled=True),
                     )
 
                 if len(stdout) > 3072:
                     result = html.escape(await paste_yaso(stdout))
                 else:
-                    result = f"<pre>{html.escape(result)}</pre>"
+                    result = f"<pre>{html.escape(stdout)}</pre>"
 
                 return await message.edit_text(
                     code_result.format(
@@ -575,7 +575,7 @@ async def node_exec(_: Client, message: Message):
                         f"{result}\n\n"
                         f"<b>Completed in {round(exec_stop_time - exec_start_time, 5)}s.</b>",
                     ),
-                    disable_web_page_preview=True,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
                 )
 
 

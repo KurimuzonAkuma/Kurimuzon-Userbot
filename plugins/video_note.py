@@ -13,19 +13,35 @@ from utils.scripts import shell_exec
 
 
 @Client.on_message(
-    ~filters.scheduled & command(["vnote"]) & filters.me & ~filters.forwarded
+    ~filters.scheduled & command(["vnote", "rvnote"]) & filters.me & ~filters.forwarded
 )
 async def vnote(_: Client, message: Message):
-    msg = message.reply_to_message or message
+    if not shutil.which("ffmpeg"):
+        return await message.edit("<b>ffmpeg not installed!</b>")
+
+    if message.media:
+        message.empty = bool(await message.delete())
+
+    is_reply = message.command[0] == "rvnote"
+
+    if is_reply:
+        msg = message.reply_to_message
+    else:
+        msg = message
 
     if not msg.media:
-        return await message.edit_text("<b>Message should contain media!</b>")
+        if not message.empty:
+            return await message.edit_text("<b>Message should contain media!</b>")
 
     if msg.media not in (
         enums.MessageMediaType.VIDEO,
         enums.MessageMediaType.ANIMATION,
     ):
-        return await message.edit_text("<b>Only video and gif supported!</b>")
+        if not message.empty:
+            return await message.edit_text("<b>Only video and gif supported!</b>")
+
+    if not message.empty:
+        await message.edit_text("<code>Converting video...</code>")
 
     media = getattr(msg, msg.media.value)
 
@@ -38,39 +54,30 @@ async def vnote(_: Client, message: Message):
 
         await msg.download(file_name=input_file_path)
 
-        await message.edit_text("<code>Converting video...</code>")
-
-        if message.media:
-            await message.delete()
-
-        if media.width == width and media.height == height and media.duration <= 60:
-            output_file_path = input_file_path
+        if media.width == media.height:
+            filters = f"scale={width}:{height}"
         else:
-            if not shutil.which("ffmpeg"):
-                with contextlib.supress(errors.MessageIdInvalid):
-                    return await message.edit("<b>ffmpeg not installed!</b>")
+            filters = rf"crop=min(iw\,ih):min(iw\,ih),scale={width}:{height}"
 
-            await shell_exec(
-                command=f"ffmpeg -y -hwaccel auto -i {input_file_path} "
-                "-t 00:01:00 "
-                # "-preset superfast -crf 24 "
-                "-vcodec libx264 -acodec aac "
-                rf'-vf "crop=min(iw\,ih):min(iw\,ih),scale={width}:{height}" '
-                f"{output_file_path}",
-                executable=db.get("shell", "executable"),
-            )
+        await shell_exec(
+            command=f"ffmpeg -y -hwaccel auto -i {input_file_path} "
+            "-t 00:01:00 -vcodec libx264 -acodec aac "
+            f'-vf "{filters}" '
+            f"{output_file_path}",
+            executable=db.get("shell", "executable"),
+        )
 
         try:
-            await message.reply_video_note(
+            await msg.reply_video_note(
                 video_note=output_file_path,
-                quote=False,
+                quote=True,
             )
         except errors.VoiceMessagesForbidden:
-            with contextlib.supress(errors.MessageIdInvalid):
+            if not message.empty:
                 return await message.edit(
                     "<b>Voice messages forbidden in this chat.</b>"
                 )
 
 
 module = modules_help.add_module("vnote", __file__)
-module.add_command("vnote", "Make video note from message or reply media", "[reply]")
+module.add_command("vnote", "Make video note from message or reply media", "[reply]", aliases=["rvnote"])

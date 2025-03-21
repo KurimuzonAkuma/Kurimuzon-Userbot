@@ -7,7 +7,7 @@ from time import perf_counter
 import git
 import pyrogram
 from pyrogram import Client, filters
-from pyrogram.types import Message
+from pyrogram.types import Message, LinkPreviewOptions
 
 from utils.db import db
 from utils.filters import command
@@ -35,17 +35,17 @@ async def help_cmd(_, message: Message):
 
             for text in modules_help.help():
                 if msg_edited:
-                    await message.reply(text, disable_web_page_preview=True)
+                    await message.reply(text, link_preview_options=LinkPreviewOptions(is_disabled=True))
                 else:
-                    await message.edit(text, disable_web_page_preview=True)
+                    await message.edit(text, link_preview_options=LinkPreviewOptions(is_disabled=True))
                     msg_edited = True
         elif args[0] in modules_help.modules:
             await message.edit(
-                modules_help.module_help(args[0]), disable_web_page_preview=True
+                modules_help.module_help(args[0]), link_preview_options=LinkPreviewOptions(is_disabled=True)
             )
         else:
             await message.edit(
-                modules_help.command_help(args[0]), disable_web_page_preview=True
+                modules_help.command_help(args[0]), link_preview_options=LinkPreviewOptions(is_disabled=True)
             )
     except ValueError as e:
         await message.edit(e)
@@ -201,7 +201,7 @@ async def _status(_, message: Message):
     result += "<b>Dev:</b> <a href='https://t.me/KurimuzonAkuma'>KurimuzonAkuma</a>\n\n"
 
     if "-a" not in args:
-        return await message.edit(result, disable_web_page_preview=True)
+        return await message.edit(result, link_preview_options=LinkPreviewOptions(is_disabled=True))
 
     await message.edit("<code>Getting info...</code>")
 
@@ -232,7 +232,7 @@ async def _status(_, message: Message):
     result += f"├─<b>CPU usage:</b> <code>{cpu_usage}%</code>\n"
     result += f"└─<b>RAM usage:</b> <code>{ram_usage}MB</code>"
 
-    await message.edit(result, disable_web_page_preview=True)
+    await message.edit(result, link_preview_options=LinkPreviewOptions(is_disabled=True))
 
 
 @Client.on_message(
