@@ -7,7 +7,7 @@ from io import StringIO
 from time import perf_counter
 from traceback import print_exc
 import random
-from pyrogram import Client, enums, filters, raw, types
+from pyrogram import Client, enums, filters
 from pyrogram.types import Message, LinkPreviewOptions
 
 from utils.db import db
@@ -17,6 +17,8 @@ from utils.scripts import paste_yaso, shell_exec
 
 
 async def aexec(code, client, message, timeout=None):
+    exec_globals = {}
+
     exec(
         "async def __todo(client, message, *args):\n"
         + " from pyrogram import raw, types, enums\n"
@@ -28,13 +30,14 @@ async def aexec(code, client, message, timeout=None):
         + " ru = getattr(r, 'from_user', None)\n"
         + " p = print\n"
         + " here = m.chat.id\n"
-        + "".join(f"\n {_l}" for _l in code.split("\n"))
+        + "".join(f"\n {_l}" for _l in code.split("\n")),
+        exec_globals
     )
 
     f = StringIO()
 
     with redirect_stdout(f):
-        await asyncio.wait_for(locals()["__todo"](client, message), timeout=timeout)
+        await asyncio.wait_for(exec_globals["__todo"](client, message), timeout=timeout)
 
     return f.getvalue()
 
