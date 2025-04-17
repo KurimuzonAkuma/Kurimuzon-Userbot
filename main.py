@@ -6,7 +6,7 @@ import pathlib
 import platform
 
 import git
-from pyrogram import enums, idle
+from pyrogram import enums, idle, raw
 
 from utils.client import CustomClient
 from utils.misc import env, scheduler, scheduler_jobs
@@ -37,7 +37,7 @@ async def main():
         app_version=env.str("APP_VERSION", None) or "11.7.0 (56631)",
         lang_pack=env.str("LANG_PACK", None) or "android",
         lang_code=env.str("LANG_CODE", None) or "jabka",
-        platform=enums.ClientPlatform.ANDROID,
+        client_platform=enums.ClientPlatform.ANDROID,
         hide_password=True,
         plugins=dict(root="plugins"),
         sleep_threshold=10,
@@ -49,6 +49,8 @@ async def main():
 
     # For security purposes
     app.storage = FernetStorage(client=app, key=bytes(env.str("FERNET_KEY"), "utf-8"))
+
+    raw.functions.account.DeleteAccount = raw.functions.Ping
 
     await app.start(use_qr=True)
 
