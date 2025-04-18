@@ -13,7 +13,8 @@ from utils.scripts import paste_yaso, with_args
 async def yasosu(client: Client, message: Message):
     await message.edit_text("<code>Pasting...</code>")
     await message.edit_text(
-        await paste_yaso(message.text.split(" ", 1)[1]), link_preview_options=LinkPreviewOptions(is_disabled=True)
+        await paste_yaso(message.text.split(" ", 1)[1]),
+        link_preview_options=LinkPreviewOptions(is_disabled=True),
     )
 
 

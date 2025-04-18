@@ -179,9 +179,7 @@ class CustomClient(Client):
         try:
             module = importlib.import_module(path)
         except ImportError:
-            log.warning(
-                '[%s] [UNLOAD] Ignoring non-existent module "%s"', self.name, path
-            )
+            log.warning('[%s] [UNLOAD] Ignoring non-existent module "%s"', self.name, path)
             return False
 
         for name in vars(module).keys():
@@ -211,8 +209,7 @@ class CustomClient(Client):
             for option in ["include", "exclude"]:
                 if plugins.get(option, []):
                     plugins[option] = [
-                        (i.split()[0], i.split()[1:] or None)
-                        for i in self.plugins[option]
+                        (i.split()[0], i.split()[1:] or None) for i in self.plugins[option]
                     ]
         else:
             return
@@ -242,9 +239,7 @@ class CustomClient(Client):
                         # noinspection PyBroadException
                         try:
                             for handler, group in getattr(module, name).handlers:
-                                if isinstance(handler, Handler) and isinstance(
-                                    group, int
-                                ):
+                                if isinstance(handler, Handler) and isinstance(group, int):
                                     self.add_handler(handler, group)
 
                                     log.info(
@@ -298,9 +293,7 @@ class CustomClient(Client):
                         # noinspection PyBroadException
                         try:
                             for handler, group in getattr(module, name).handlers:
-                                if isinstance(handler, Handler) and isinstance(
-                                    group, int
-                                ):
+                                if isinstance(handler, Handler) and isinstance(group, int):
                                     self.add_handler(handler, group)
 
                                     log.info(
@@ -360,9 +353,7 @@ class CustomClient(Client):
                         # noinspection PyBroadException
                         try:
                             for handler, group in getattr(module, name).handlers:
-                                if isinstance(handler, Handler) and isinstance(
-                                    group, int
-                                ):
+                                if isinstance(handler, Handler) and isinstance(group, int):
                                     self.remove_handler(handler, group)
 
                                     log.info(

@@ -24,9 +24,7 @@ from utils.scripts import (
 )
 
 
-@Client.on_message(
-    ~filters.scheduled & command(["help", "h"]) & filters.me & ~filters.forwarded
-)
+@Client.on_message(~filters.scheduled & command(["help", "h"]) & filters.me & ~filters.forwarded)
 async def help_cmd(_, message: Message):
     args, _ = get_args(message)
     try:
@@ -35,25 +33,29 @@ async def help_cmd(_, message: Message):
 
             for text in modules_help.help():
                 if msg_edited:
-                    await message.reply(text, link_preview_options=LinkPreviewOptions(is_disabled=True))
+                    await message.reply(
+                        text, link_preview_options=LinkPreviewOptions(is_disabled=True)
+                    )
                 else:
-                    await message.edit(text, link_preview_options=LinkPreviewOptions(is_disabled=True))
+                    await message.edit(
+                        text, link_preview_options=LinkPreviewOptions(is_disabled=True)
+                    )
                     msg_edited = True
         elif args[0] in modules_help.modules:
             await message.edit(
-                modules_help.module_help(args[0]), link_preview_options=LinkPreviewOptions(is_disabled=True)
+                modules_help.module_help(args[0]),
+                link_preview_options=LinkPreviewOptions(is_disabled=True),
             )
         else:
             await message.edit(
-                modules_help.command_help(args[0]), link_preview_options=LinkPreviewOptions(is_disabled=True)
+                modules_help.command_help(args[0]),
+                link_preview_options=LinkPreviewOptions(is_disabled=True),
             )
     except ValueError as e:
         await message.edit(e)
 
 
-@Client.on_message(
-    ~filters.scheduled & command(["restart"]) & filters.me & ~filters.forwarded
-)
+@Client.on_message(~filters.scheduled & command(["restart"]) & filters.me & ~filters.forwarded)
 async def _restart(_: Client, message: Message):
     db.set(
         "core.updater",
@@ -69,9 +71,7 @@ async def _restart(_: Client, message: Message):
     os.execvp(sys.executable, [sys.executable, *sys.argv])
 
 
-@Client.on_message(
-    ~filters.scheduled & command(["update"]) & filters.me & ~filters.forwarded
-)
+@Client.on_message(~filters.scheduled & command(["update"]) & filters.me & ~filters.forwarded)
 async def _update(_: Client, message: Message):
     await message.edit("<code>Updating...</code>")
     args, nargs = get_args(message)
@@ -136,10 +136,7 @@ async def _update(_: Client, message: Message):
 
 
 @Client.on_message(
-    ~filters.scheduled
-    & command(["kprefix", "prefix"])
-    & filters.me
-    & ~filters.forwarded
+    ~filters.scheduled & command(["kprefix", "prefix"]) & filters.me & ~filters.forwarded
 )
 async def set_prefix(_, message: Message):
     args, _ = get_args(message)
@@ -178,9 +175,7 @@ async def sendmod(client: Client, message: Message):
         await message.reply(format_exc(e), quote=False)
 
 
-@Client.on_message(
-    ~filters.scheduled & command(["status"]) & filters.me & ~filters.forwarded
-)
+@Client.on_message(~filters.scheduled & command(["status"]) & filters.me & ~filters.forwarded)
 async def _status(_, message: Message):
     args, _ = get_args(message)
 
@@ -194,25 +189,25 @@ async def _status(_, message: Message):
     )
     repo_link = "https://github.com/KurimuzonAkuma/Kurimuzon-Userbot"
 
-    result = f"<emoji id=5219903664428167948>🤖</emoji> <a href='{repo_link}'>Kurimuzon-Userbot</a> / "
+    result = (
+        f"<emoji id=5219903664428167948>🤖</emoji> <a href='{repo_link}'>Kurimuzon-Userbot</a> / "
+    )
     result += f"<a href='{repo_link}/commit/{current_hash}'>#{current_hash[:7]} ({current_version})</a>\n\n"
     result += f"<b>Pyrogram:</b> <code>{pyrogram.__version__}</code>\n"
     result += f"<b>Python:</b> <code>{sys.version}</code>\n"
     result += "<b>Dev:</b> <a href='https://t.me/KurimuzonAkuma'>KurimuzonAkuma</a>\n\n"
 
     if "-a" not in args:
-        return await message.edit(result, link_preview_options=LinkPreviewOptions(is_disabled=True))
+        return await message.edit(
+            result, link_preview_options=LinkPreviewOptions(is_disabled=True)
+        )
 
     await message.edit("<code>Getting info...</code>")
 
     cpu_usage = get_cpu_usage()
     ram_usage = get_ram_usage()
-    kernel_version = (
-        subprocess.run(["uname", "-a"], capture_output=True).stdout.decode().strip()
-    )
-    system_uptime = (
-        subprocess.run(["uptime", "-p"], capture_output=True).stdout.decode().strip()
-    )
+    kernel_version = subprocess.run(["uname", "-a"], capture_output=True).stdout.decode().strip()
+    system_uptime = subprocess.run(["uptime", "-p"], capture_output=True).stdout.decode().strip()
 
     result += "<b>Bot status:</b>\n"
     result += f"├─<b>Uptime:</b> <code>{time_diff(uptime)}</code>\n"
@@ -235,9 +230,7 @@ async def _status(_, message: Message):
     await message.edit(result, link_preview_options=LinkPreviewOptions(is_disabled=True))
 
 
-@Client.on_message(
-    ~filters.scheduled & command(["ping", "p"]) & filters.me & ~filters.forwarded
-)
+@Client.on_message(~filters.scheduled & command(["ping", "p"]) & filters.me & ~filters.forwarded)
 async def ping(_, message: Message):
     start = perf_counter()
     await message.edit("<b>Pong!</b>")
@@ -246,9 +239,7 @@ async def ping(_, message: Message):
 
 
 module = modules_help.add_module("base", __file__)
-module.add_command(
-    "help", "Get common/module/command help.", "[module/command name]", ["h"]
-)
+module.add_command("help", "Get common/module/command help.", "[module/command name]", ["h"])
 module.add_command("prefix", "Set custom prefix", None, ["kprefix"])
 module.add_command("restart", "Useful when you want to reload a bot")
 module.add_command("update", "Update the userbot from the repository")

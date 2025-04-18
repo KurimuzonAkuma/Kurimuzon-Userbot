@@ -18,9 +18,7 @@ os.chdir(pathlib.Path(__file__).parent)
 
 async def main():
     stdout_handler = logging.StreamHandler()
-    stdout_handler.setFormatter(
-        Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    )
+    stdout_handler.setFormatter(Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 
     logging.basicConfig(
         level=logging.INFO,

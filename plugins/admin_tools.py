@@ -34,10 +34,7 @@ async def ban_handler(client: Client, message: Message):
     user_id = None
 
     if message.reply_to_message:
-        user_id = (
-            message.reply_to_message.from_user.id
-            or message.reply_to_message.sender_chat.id
-        )
+        user_id = message.reply_to_message.from_user.id or message.reply_to_message.sender_chat.id
     elif args:
         if args[0].isdigit():
             user_id = int(args[0])
@@ -67,10 +64,7 @@ async def unban_handler(client: Client, message: Message):
     user_id = None
 
     if message.reply_to_message:
-        user_id = (
-            message.reply_to_message.from_user.id
-            or message.reply_to_message.sender_chat.id
-        )
+        user_id = message.reply_to_message.from_user.id or message.reply_to_message.sender_chat.id
     elif args:
         if args[0].isdigit():
             user_id = int(args[0])

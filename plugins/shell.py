@@ -13,9 +13,7 @@ from utils.misc import modules_help
 from utils.scripts import get_args, get_args_raw, shell_exec, with_args
 
 
-@Client.on_message(
-    ~filters.scheduled & command(["shell", "sh"]) & filters.me & ~filters.forwarded
-)
+@Client.on_message(~filters.scheduled & command(["shell", "sh"]) & filters.me & ~filters.forwarded)
 @with_args("<b>Command is not provided</b>")
 async def shell_handler(_: Client, message: Message):
     await message.edit("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")

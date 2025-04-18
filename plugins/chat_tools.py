@@ -8,17 +8,13 @@ from utils.misc import modules_help
 from utils.scripts import get_args_raw, with_reply
 
 
-@Client.on_message(
-    ~filters.scheduled & command(["d", "del"]) & filters.me & ~filters.forwarded
-)
+@Client.on_message(~filters.scheduled & command(["d", "del"]) & filters.me & ~filters.forwarded)
 async def del_msg(_, message: Message):
     await message.delete()
     await message.reply_to_message.delete()
 
 
-@Client.on_message(
-    ~filters.scheduled & command("purge") & filters.me & ~filters.forwarded
-)
+@Client.on_message(~filters.scheduled & command("purge") & filters.me & ~filters.forwarded)
 @with_reply
 async def purge(client: Client, message: Message):
     chunk = []

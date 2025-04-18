@@ -74,10 +74,10 @@ async def vnote(_: Client, message: Message):
             )
         except errors.VoiceMessagesForbidden:
             if not message.empty:
-                return await message.edit(
-                    "<b>Voice messages forbidden in this chat.</b>"
-                )
+                return await message.edit("<b>Voice messages forbidden in this chat.</b>")
 
 
 module = modules_help.add_module("vnote", __file__)
-module.add_command("vnote", "Make video note from message or reply media", "[reply]", aliases=["rvnote"])
+module.add_command(
+    "vnote", "Make video note from message or reply media", "[reply]", aliases=["rvnote"]
+)

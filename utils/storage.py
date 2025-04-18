@@ -193,9 +193,7 @@ class FernetStorage(Storage):
         )
 
     async def update_usernames(self, usernames: List[Tuple[int, List[str]]]):
-        self.conn.executemany(
-            "DELETE FROM usernames WHERE id = ?", [(id,) for id, _ in usernames]
-        )
+        self.conn.executemany("DELETE FROM usernames WHERE id = ?", [(id,) for id, _ in usernames])
 
         self.conn.executemany(
             "REPLACE INTO usernames (id, username) VALUES (?, ?)",

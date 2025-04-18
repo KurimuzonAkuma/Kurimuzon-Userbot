@@ -64,9 +64,7 @@ class SqliteDatabase(Database):
                 raise e from None
 
     def get(self, module: str, variable: str, default=None):
-        cur = self._execute(
-            module, f"SELECT * FROM '{module}' WHERE var=:var", {"var": variable}
-        )
+        cur = self._execute(module, f"SELECT * FROM '{module}' WHERE var=:var", {"var": variable})
         row = cur.fetchone()
         return default if row is None else self._parse_row(row)
 

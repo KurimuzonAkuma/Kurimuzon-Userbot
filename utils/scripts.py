@@ -55,9 +55,7 @@ class Formatter(logging.Formatter):
 def get_proxy(proxies_path: str = "proxies.txt") -> dict:
     try:
         with open(proxies_path, "r") as f:
-            proxies = [
-                line.strip() for line in f if line.strip() and not line.startswith("#")
-            ]
+            proxies = [line.strip() for line in f if line.strip() and not line.startswith("#")]
     except FileNotFoundError:
         return None
 
@@ -77,9 +75,7 @@ def get_proxy(proxies_path: str = "proxies.txt") -> dict:
     if len(proxy) == 2:
         username, password = proxy[0].split(":")
 
-        proxy = dict(
-            scheme=protocol, server=proxy[1], username=username, password=password
-        )
+        proxy = dict(scheme=protocol, server=proxy[1], username=username, password=password)
     else:
         proxy = dict(scheme=protocol, server=proxy[0])
 
@@ -136,9 +132,7 @@ def generate_random_string(length):
 
 async def paste_yaso(code: str, expiration_time: int = 10080):
     try:
-        async with aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(ssl=False)
-        ) as session:
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
             async with session.post(
                 "https://api.yaso.su/v1/auth/guest",
             ) as auth:
@@ -233,9 +227,7 @@ class ScheduleJob:
     def __init__(
         self,
         func: callable,
-        trigger: Optional[Union[CronTrigger, IntervalTrigger]] = IntervalTrigger(
-            seconds=3600
-        ),
+        trigger: Optional[Union[CronTrigger, IntervalTrigger]] = IntervalTrigger(seconds=3600),
         *args,
         **kwargs,
     ):
@@ -425,9 +417,13 @@ class ModuleHelp:
         help_text = f"<b>Help for command</b> <code>{prefix}{command.name}</code>\n"
         if command.aliases:
             help_text += "<b>Aliases:</b> "
-            help_text += f"{' '.join([f'<code>{prefix}{alias}</code>' for alias in command.aliases])}\n"
+            help_text += (
+                f"{' '.join([f'<code>{prefix}{alias}</code>' for alias in command.aliases])}\n"
+            )
 
-        help_text += f"\n<b>Module: {module.name}</b> (<code>{prefix}help {module.name}</code>)\n\n"
+        help_text += (
+            f"\n<b>Module: {module.name}</b> (<code>{prefix}help {module.name}</code>)\n\n"
+        )
         help_text += f"<code>{prefix}{command.name}"
 
         if command.args:
