@@ -25,20 +25,6 @@ install_python_dependencies() {
     python3 -m pip install -U -r requirements.txt
 }
 
-clone_repo() {
-    if [ -d "Kurimuzon-Userbot" ]; then
-        cd Kurimuzon-Userbot || exit 2
-    else
-        git clone https://github.com/KurimuzonAkuma/Kurimuzon-Userbot || exit 2
-        cd Kurimuzon-Userbot || exit 2
-    fi
-
-    if [ -f ".env" ] && [ -f "KurimuzonUserbot.session" ]; then
-        printf "It seems that Kurimuzon-Userbot is already installed.\n"
-        exit 1
-    fi
-}
-
 configure_env() {
     echo
     echo "Enter API_ID and API_HASH"
@@ -184,8 +170,12 @@ main () {
         install_linux_dependencies
     fi
 
-    # Clone repo
-    clone_repo
+    cd Kurimuzon-Userbot || exit 2
+
+    if [ -f ".env" ] && [ -f "KurimuzonUserbot.session" ]; then
+        printf "It seems that Kurimuzon-Userbot is already installed.\n"
+        exit 1
+    fi
 
     # Configure env
     configure_env
