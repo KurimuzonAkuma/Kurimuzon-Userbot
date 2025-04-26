@@ -18,12 +18,19 @@ async def del_msg(_, message: Message):
 @with_reply
 async def purge(client: Client, message: Message):
     chunk = []
+
     async for msg in client.get_chat_history(
         chat_id=message.chat.id,
+        min_id=message.reply_to_message.id - 1,
     ):
         if msg.id < message.reply_to_message.id:
             break
+
+        if message.message_thread_id != msg.message_thread_id:
+            continue
+
         chunk.append(msg.id)
+
         if len(chunk) >= 100:
             await client.delete_messages(message.chat.id, chunk)
             chunk.clear()

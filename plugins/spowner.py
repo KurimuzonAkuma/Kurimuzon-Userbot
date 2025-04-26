@@ -1,26 +1,58 @@
-from pyrogram import Client, filters, raw
+from pyrogram import Client, filters, raw, enums
 from pyrogram.types import Message
+import re
 
 from utils.filters import command
 from utils.misc import modules_help
 from utils.scripts import with_reply
 
 
+async def search_user(client: Client, user_id: int):
+    try:
+        r = await client.get_inline_bot_results(
+            bot="@tgdb_bot",
+            query=str(user_id),
+        )
+
+        match = re.search(r"(@\w+)", r.results[0].send_message.message)
+
+        if match:
+            return match.group(1)
+    except TimeoutError:
+        pass
+
+
 @Client.on_message(command(["spowner"]) & filters.me)
 @with_reply
 async def calc(client: Client, message: Message):
-    if not message.reply_to_message.sticker:
-        return await message.edit("<b>No sticker found</b>")
+    input_sticker_set = None
 
-    set_name = message.reply_to_message.sticker.set_name
+    if message.reply_to_message.sticker:
+        input_sticker_set = raw.types.InputStickerSetShortName(
+            short_name=message.reply_to_message.sticker.set_name
+        )
+    elif message.reply_to_message.entities:
+        for entity in message.reply_to_message.entities:
+            if entity.type == enums.MessageEntityType.CUSTOM_EMOJI:
+                r = await client.invoke(
+                    raw.functions.messages.GetCustomEmojiDocuments(
+                        document_id=[entity.custom_emoji_id]
+                    )
+                )
 
-    if message.reply_to_message.sticker and not set_name:
-        return await message.edit("<b>Sticker has no set name</b>")
+                for attr in r[0].attributes:
+                    if isinstance(attr, raw.types.DocumentAttributeCustomEmoji):
+                        input_sticker_set = attr.stickerset
+                        break
+                break
+
+    if not input_sticker_set:
+        return await message.edit("<b>Sticker not found</b>")
 
     r = await client.invoke(
         raw.functions.messages.GetStickerSet(
             hash=0,
-            stickerset=raw.types.InputStickerSetShortName(short_name=set_name),
+            stickerset=input_sticker_set,
         )
     )
 
@@ -29,10 +61,20 @@ async def calc(client: Client, message: Message):
 
     owner_id = r.set.id >> 32
 
+    if (r.set_id >> 16 & 0xFF) == 0x3f:
+        owner_id |= 0x80000000
+
     if r.set.id >> 24 & 0xFF:
         owner_id += 0x100000000
 
-    await message.edit_text(f"<b>Sticker set owner id:</b> <code>{owner_id}</code>")
+    username = await search_user(client, owner_id)
+
+    if username:
+        return await message.edit_text(
+            f"<b>Sticker set owner id:</b> <code>{owner_id}</code>\n<b>Username:</b> {username}"
+        )
+
+    return await message.edit_text(f"<b>Sticker set owner id:</b> <code>{owner_id}</code>")
 
 
 module = modules_help.add_module("spowner", __file__)

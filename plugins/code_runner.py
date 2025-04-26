@@ -7,7 +7,8 @@ from io import StringIO
 from time import perf_counter
 from traceback import print_exc
 import random
-from pyrogram import Client, enums, filters
+
+from pyrogram import Client, enums, filters, raw, types
 from pyrogram.types import Message, LinkPreviewOptions
 
 from utils.db import db
@@ -17,19 +18,22 @@ from utils.scripts import paste_yaso, shell_exec
 
 
 async def aexec(code, client, message, timeout=None):
-    exec_globals = {}
+    exec_globals = {
+        "app": client,
+        "m": message,
+        "r": message.reply_to_message,
+        "u": message.from_user,
+        "ru": getattr(message.reply_to_message, "from_user", None),
+        "p": print,
+        "here": message.chat.id,
+        "db": db,
+        "raw": raw,
+        "types": types,
+        "enums": enums,
+    }
 
     exec(
         "async def __todo(client, message, *args):\n"
-        + " from pyrogram import raw, types, enums\n"
-        + " from utils.db import db\n"
-        + " app = client\n"
-        + " m = message\n"
-        + " r = m.reply_to_message\n"
-        + " u = m.from_user\n"
-        + " ru = getattr(r, 'from_user', None)\n"
-        + " p = print\n"
-        + " here = m.chat.id\n"
         + "".join(f"\n {_l}" for _l in code.split("\n")),
         exec_globals,
     )
@@ -43,8 +47,6 @@ async def aexec(code, client, message, timeout=None):
 
 
 code_result = (
-    "<b><emoji id={emoji_id}>🌐</emoji> Language:</b>\n"
-    "<code>{language}</code>\n\n"
     "<b><emoji id=5431376038628171216>💻</emoji> Code:</b>\n"
     '<pre language="{pre_language}">{code}</pre>\n\n'
     "{result}"
@@ -104,8 +106,6 @@ async def python_exec(client: Client, message: Message):
         if result:
             return await message.edit_text(
                 code_result.format(
-                    emoji_id=5260480440971570446,
-                    language="Python",
                     pre_language="python",
                     code=html.escape(code),
                     result=f"<b><emoji id=5472164874886846699>✨</emoji> Result</b>:\n"
@@ -118,8 +118,6 @@ async def python_exec(client: Client, message: Message):
             return await message.reply_document(
                 document="error.log",
                 caption=code_result.format(
-                    emoji_id=5260480440971570446,
-                    language="Python",
                     pre_language="python",
                     code=html.escape(code),
                     result=f"<b><emoji id=5472164874886846699>✨</emoji> Result is too long</b>\n"
@@ -129,8 +127,6 @@ async def python_exec(client: Client, message: Message):
     except asyncio.TimeoutError:
         return await message.edit_text(
             code_result.format(
-                emoji_id=5260480440971570446,
-                language="Python",
                 pre_language="python",
                 code=html.escape(code),
                 result="<b><emoji id=5465665476971471368>❌</emoji> Timeout Error!</b>",
@@ -144,8 +140,6 @@ async def python_exec(client: Client, message: Message):
 
         return await message.edit_text(
             code_result.format(
-                emoji_id=5260480440971570446,
-                language="Python",
                 pre_language="python",
                 code=html.escape(code),
                 result=f"<b><emoji id=5465665476971471368>❌</emoji> {e.__class__.__name__}: {e}</b>\n"
@@ -185,8 +179,6 @@ async def gcc_exec(_: Client, message: Message):
                 if rcode != 0:
                     return await message.edit_text(
                         code_result.format(
-                            emoji_id=5257955893554721164,
-                            language="C",
                             pre_language="c",
                             code=html.escape(code),
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Compilation error with status code {rcode}:</b>\n"
@@ -205,8 +197,6 @@ async def gcc_exec(_: Client, message: Message):
             except asyncio.exceptions.TimeoutError:
                 return await message.edit_text(
                     code_result.format(
-                        emoji_id=5257955893554721164,
-                        language="C",
                         pre_language="c",
                         code=html.escape(code),
                         result=f"<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n<b>Timeout expired ({timeout} seconds)</b>",
@@ -217,8 +207,6 @@ async def gcc_exec(_: Client, message: Message):
                 if stderr:
                     return await message.edit_text(
                         code_result.format(
-                            emoji_id=5257955893554721164,
-                            language="C",
                             pre_language="c",
                             code=html.escape(code),
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Error with status code {rcode}:</b>\n"
@@ -236,8 +224,6 @@ async def gcc_exec(_: Client, message: Message):
 
                 return await message.edit_text(
                     code_result.format(
-                        emoji_id=5257955893554721164,
-                        language="C",
                         pre_language="c",
                         code=html.escape(code),
                         result=f"<b><emoji id=5472164874886846699>✨</emoji> Result</b>:\n"
@@ -279,8 +265,6 @@ async def gpp_exec(_: Client, message: Message):
                 if rcode != 0:
                     return await message.edit_text(
                         code_result.format(
-                            emoji_id=5258035603852767295,
-                            language="C++",
                             pre_language="cpp",
                             code=html.escape(code),
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Compilation error with status code {rcode}:</b>\n"
@@ -299,8 +283,6 @@ async def gpp_exec(_: Client, message: Message):
             except asyncio.exceptions.TimeoutError:
                 return await message.edit_text(
                     code_result.format(
-                        emoji_id=5258035603852767295,
-                        language="C++",
                         pre_language="cpp",
                         code=html.escape(code),
                         result=f"<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n<b>Timeout expired ({timeout} seconds)</b>",
@@ -311,8 +293,6 @@ async def gpp_exec(_: Client, message: Message):
                 if stderr:
                     return await message.edit_text(
                         code_result.format(
-                            emoji_id=5258035603852767295,
-                            language="C++",
                             pre_language="cpp",
                             code=html.escape(code),
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Error with status code {rcode}:</b>\n"
@@ -328,8 +308,6 @@ async def gpp_exec(_: Client, message: Message):
 
                 return await message.edit_text(
                     code_result.format(
-                        emoji_id=5258035603852767295,
-                        language="C++",
                         pre_language="cpp",
                         code=html.escape(code),
                         result=f"<b><emoji id=5472164874886846699>✨</emoji> Result</b>:\n"
@@ -370,8 +348,6 @@ async def lua_exec(_: Client, message: Message):
             except asyncio.exceptions.TimeoutError:
                 return await message.edit_text(
                     code_result.format(
-                        emoji_id=5258338381867266341,
-                        language="Lua",
                         pre_language="lua",
                         code=html.escape(code),
                         result=f"<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n<b>Timeout expired ({timeout} seconds)</b>",
@@ -382,8 +358,6 @@ async def lua_exec(_: Client, message: Message):
                 if stderr:
                     return await message.edit_text(
                         code_result.format(
-                            emoji_id=5258338381867266341,
-                            language="Lua",
                             pre_language="lua",
                             code=html.escape(code),
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Error with status code {rcode}:</b>\n"
@@ -399,8 +373,6 @@ async def lua_exec(_: Client, message: Message):
 
                 return await message.edit_text(
                     code_result.format(
-                        emoji_id=5258338381867266341,
-                        language="Lua",
                         pre_language="lua",
                         code=html.escape(code),
                         result=f"<b><emoji id=5472164874886846699>✨</emoji> Result</b>:\n"
@@ -440,8 +412,6 @@ async def go_exec(_: Client, message: Message):
             except asyncio.exceptions.TimeoutError:
                 return await message.edit_text(
                     code_result.format(
-                        emoji_id=5258117049317603088,
-                        language="Go",
                         pre_language="go",
                         code=html.escape(code),
                         result=f"<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n<b>Timeout expired ({timeout} seconds)</b>",
@@ -452,8 +422,6 @@ async def go_exec(_: Client, message: Message):
                 if stderr:
                     return await message.edit_text(
                         code_result.format(
-                            emoji_id=5258117049317603088,
-                            language="Go",
                             pre_language="go",
                             code=html.escape(code),
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Error with status code {rcode}:</b>\n"
@@ -469,8 +437,6 @@ async def go_exec(_: Client, message: Message):
 
                 return await message.edit_text(
                     code_result.format(
-                        emoji_id=5258117049317603088,
-                        language="Go",
                         pre_language="go",
                         code=html.escape(code),
                         result=f"<b><emoji id=5472164874886846699>✨</emoji> Result</b>:\n"
@@ -512,8 +478,6 @@ async def node_exec(_: Client, message: Message):
             except asyncio.exceptions.TimeoutError:
                 return await message.edit_text(
                     code_result.format(
-                        emoji_id=5258042115023188415,
-                        language="Node.js",
                         pre_language="javascript",
                         code=html.escape(code),
                         result=f"<b><emoji id=5465665476971471368>❌</emoji> Error!</b>\n<b>Timeout expired ({timeout} seconds)</b>",
@@ -524,8 +488,6 @@ async def node_exec(_: Client, message: Message):
                 if stderr:
                     return await message.edit_text(
                         code_result.format(
-                            emoji_id=5258042115023188415,
-                            language="Node.js",
                             pre_language="javascript",
                             code=html.escape(code),
                             result=f"<b><emoji id=5465665476971471368>❌</emoji> Error with status code {rcode}:</b>\n"
@@ -541,8 +503,6 @@ async def node_exec(_: Client, message: Message):
 
                 return await message.edit_text(
                     code_result.format(
-                        emoji_id=5258042115023188415,
-                        language="Node.js",
                         pre_language="javascript",
                         code=html.escape(code),
                         result=f"<b><emoji id=5472164874886846699>✨</emoji> Result</b>:\n"
