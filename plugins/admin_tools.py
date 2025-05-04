@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 
 from pyrogram import Client, enums, errors, filters
@@ -23,6 +24,10 @@ async def kick_delete_handler(client: Client, message: Message):
         return await message.edit(format_exc(e))
     await message.edit(f"<b>Successfully kicked {len(values)} deleted account(s)</b>")
 
+    await asyncio.sleep(5)
+
+    await message.delete()
+
 
 @Client.on_message(command(["ban"]) & filters.me)
 async def ban_handler(client: Client, message: Message):
@@ -46,6 +51,7 @@ async def ban_handler(client: Client, message: Message):
 
     try:
         await message.chat.ban_member(user_id)
+        await message.edit(f"User <code>{user_id}</code> has been banned")
     except errors.UserAdminInvalid:
         return await message.edit("You can't change rights of this user")
     except errors.ChatAdminRequired:
@@ -53,6 +59,9 @@ async def ban_handler(client: Client, message: Message):
     except Exception as e:
         print(e)
 
+    await asyncio.sleep(5)
+
+    await message.delete()
 
 @Client.on_message(command(["unban"]) & filters.me)
 async def unban_handler(client: Client, message: Message):
@@ -76,12 +85,17 @@ async def unban_handler(client: Client, message: Message):
 
     try:
         await message.chat.unban_member(user_id)
+        await message.edit(f"User <code>{user_id}</code> has been unbanned")
     except errors.UserAdminInvalid:
         return await message.edit("You can't change rights of this user")
     except errors.ChatAdminRequired:
         return await message.edit("You don't have admin rights")
     except Exception as e:
         print(e)
+
+    await asyncio.sleep(5)
+
+    await message.delete()
 
 
 module = modules_help.add_module("admin_tools", __file__)

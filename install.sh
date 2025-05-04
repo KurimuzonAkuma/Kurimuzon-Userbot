@@ -170,8 +170,6 @@ main () {
         install_linux_dependencies
     fi
 
-    cd Kurimuzon-Userbot || exit 2
-
     if [ -f ".env" ] && [ -f "KurimuzonUserbot.session" ]; then
         printf "It seems that Kurimuzon-Userbot is already installed.\n"
         exit 1
