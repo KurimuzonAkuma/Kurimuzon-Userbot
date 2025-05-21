@@ -63,6 +63,7 @@ async def ban_handler(client: Client, message: Message):
 
     await message.delete()
 
+
 @Client.on_message(command(["unban"]) & filters.me)
 async def unban_handler(client: Client, message: Message):
     if message.chat.type not in (enums.ChatType.SUPERGROUP, enums.ChatType.GROUP):

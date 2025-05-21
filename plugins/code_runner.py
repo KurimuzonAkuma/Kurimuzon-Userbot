@@ -7,6 +7,7 @@ from io import StringIO
 from time import perf_counter
 from traceback import print_exc
 import random
+from typing import Optional
 
 from pyrogram import Client, enums, filters, raw, types
 from pyrogram.types import Message, LinkPreviewOptions
@@ -47,89 +48,55 @@ async def aexec(code, client, message, timeout=None):
 
 
 code_result = (
-    "<b><emoji id=5431376038628171216>💻</emoji> Code:</b>\n"
+    "<blockquote><emoji id=5431376038628171216>💻</emoji> Code:</blockquote>\n"
     '<pre language="{pre_language}">{code}</pre>\n\n'
     "{result}"
 )
 
 
+def extract_code_from_reply(message: Message, language: str = None) -> Optional[str]:
+    """Извлекает python-код из реплая или возвращает None."""
+    if not message.reply_to_message:
+        return None
+
+    if language and message.reply_to_message.entities:
+        for entity in message.reply_to_message.entities:
+            if entity.type == enums.MessageEntityType.PRE and entity.language == language:
+                return message.reply_to_message.content[
+                    entity.offset : entity.offset + entity.length
+                ]
+
+    return message.reply_to_message.content
+
+
 @Client.on_message(~filters.scheduled & command(["py", "rpy"]) & filters.me & ~filters.forwarded)
 async def python_exec(client: Client, message: Message):
-    if len(message.command) == 1 and message.command[0] != "rpy":
+    command = message.command[0]
+    code = ""
+
+    if command == "rpy":
+        code = extract_code_from_reply(message, "python") or ""
+    elif command == "py":
+        parts = message.content.split(maxsplit=1)
+        code = parts[1] if len(parts) > 1 else ""
+
+    if not code:
         return await message.edit_text("<b>Code to execute isn't provided</b>")
 
-    if message.command[0] == "rpy":
-        if not message.reply_to_message:
-            return await message.edit_text("<b>Code to execute isn't provided</b>")
-
-        # Check if message is a reply to message with already executed code
-        for entity in message.reply_to_message.entities:
-            if entity.type == enums.MessageEntityType.PRE and entity.language == "python":
-                code = message.reply_to_message.text[entity.offset : entity.offset + entity.length]
-                break
-        else:
-            code = message.reply_to_message.text
-    else:
-        code = message.text.split(maxsplit=1)[1]
+    code = code.replace("\u00a0", "")
 
     await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
 
     try:
-        code = code.replace("\u00a0", "")
-
         start_time = perf_counter()
         result = await aexec(code, client, message, timeout=db.get("shell", "timeout", 60))
-        stop_time = perf_counter()
-
-        # Replace account phone number to anonymous
-        random_phone_number = "".join(str(random.randint(0, 9)) for _ in range(8))
-        result = result.replace(client.me.phone_number, f"888{random_phone_number}")
-
-        if not result:
-            result = "No result"
-        elif len(result) > 3072:
-            paste_result = html.escape(await paste_yaso(result))
-
-            if paste_result == "Pasting failed":
-                with open("error.log", "w") as file:
-                    file.write(result)
-
-                result = None
-            else:
-                result = paste_result
-
-        elif re.match(r"^(https?):\/\/[^\s\/$.?#].[^\s]*$", result):
-            result = html.escape(result)
-        else:
-            result = f"<pre>{html.escape(result)}</pre>"
-
-        if result:
-            return await message.edit_text(
-                code_result.format(
-                    pre_language="python",
-                    code=html.escape(code),
-                    result=f"<b><emoji id=5472164874886846699>✨</emoji> Result</b>:\n"
-                    f"{result}\n"
-                    f"<b>Completed in {round(stop_time - start_time, 5)}s.</b>",
-                ),
-                link_preview_options=LinkPreviewOptions(is_disabled=True),
-            )
-        else:
-            return await message.reply_document(
-                document="error.log",
-                caption=code_result.format(
-                    pre_language="python",
-                    code=html.escape(code),
-                    result=f"<b><emoji id=5472164874886846699>✨</emoji> Result is too long</b>\n"
-                    f"<b>Completed in {round(stop_time - start_time, 5)}s.</b>",
-                ),
-            )
+        elapsed = round(perf_counter() - start_time, 5)
     except asyncio.TimeoutError:
         return await message.edit_text(
             code_result.format(
                 pre_language="python",
                 code=html.escape(code),
-                result="<b><emoji id=5465665476971471368>❌</emoji> Timeout Error!</b>",
+                result="<blockquote><emoji id=5465665476971471368>❌</emoji> Timeout Error!</blockquote>",
             ),
             link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
@@ -142,10 +109,61 @@ async def python_exec(client: Client, message: Message):
             code_result.format(
                 pre_language="python",
                 code=html.escape(code),
-                result=f"<b><emoji id=5465665476971471368>❌</emoji> {e.__class__.__name__}: {e}</b>\n"
-                f"Traceback: {html.escape(await paste_yaso(err.getvalue()))}",
+                result=f"<blockquote><emoji id=5465665476971471368>❌</emoji> {e.__class__.__name__}: {e}</blockquote>\nTraceback: {html.escape(await paste_yaso(err.getvalue()))}",
             ),
             link_preview_options=LinkPreviewOptions(is_disabled=True),
+        )
+
+    # Replace account phone number to anonymous
+    random_phone_number = "".join(str(random.randint(0, 9)) for _ in range(8))
+    result = result.replace(client.me.phone_number, f"888{random_phone_number}")
+    paste_result = ""
+
+    if not result:
+        result = "No result"
+    elif len(result) > 512:
+        paste_result = html.escape(await paste_yaso(result))
+
+        if paste_result == "Pasting failed":
+            with open("error.log", "w") as file:
+                file.write(result)
+            result = ""
+
+    elif not re.match(r"^(https?):\/\/[^\s\/$.?#].[^\s]*$", result):
+        result = f"<pre>{html.escape(result)}</pre>"
+
+    if result:
+        if paste_result:
+            return await message.edit_text(
+                code_result.format(
+                    pre_language="python",
+                    code=html.escape(code),
+                    result=f"<blockquote><emoji id=5472164874886846699>✨</emoji> Result:</blockquote>\n"
+                    f"<pre>{result[:512]}...</pre>\n<blockquote><b><a href='{paste_result}'>More</a></b></blockquote>\n"
+                    f"<i>Completed in {elapsed}s.</i>",
+                ),
+                link_preview_options=LinkPreviewOptions(is_disabled=True),
+            )
+        else:
+            return await message.edit_text(
+                code_result.format(
+                    pre_language="python",
+                    code=html.escape(code),
+                    result=f"<blockquote><emoji id=5472164874886846699>✨</emoji> Result:</blockquote>\n"
+                    f"{result}\n"
+                    f"<i>Completed in {elapsed}s.</i>",
+                ),
+                link_preview_options=LinkPreviewOptions(is_disabled=True),
+            )
+    else:
+        return await message.reply_document(
+            document="error.log",
+            caption=code_result.format(
+                pre_language="python",
+                code=html.escape(code),
+                result=f"<blockquote><emoji id=5472164874886846699>✨</emoji> Result is too long</blockquote>\n"
+                f"<i>Completed in {elapsed}s.</i>",
+            ),
         )
 
 
@@ -155,7 +173,7 @@ async def gcc_exec(_: Client, message: Message):
         return await message.edit_text("<b>Code to execute isn't provided</b>")
 
     if message.command[0] == "rgcc":
-        code = message.reply_to_message.text
+        code = extract_code_from_reply(message, "c")
     else:
         code = message.text.split(maxsplit=1)[1]
 
@@ -241,7 +259,7 @@ async def gpp_exec(_: Client, message: Message):
         return await message.edit_text("<b>Code to execute isn't provided</b>")
 
     if message.command[0] == "rgpp":
-        code = message.reply_to_message.text
+        code = extract_code_from_reply(message, "cpp")
     else:
         code = message.text.split(maxsplit=1)[1]
 
@@ -325,7 +343,7 @@ async def lua_exec(_: Client, message: Message):
         return await message.edit_text("<b>Code to execute isn't provided</b>")
 
     if message.command[0] == "rlua":
-        code = message.reply_to_message.text
+        code = extract_code_from_reply(message, "lua")
     else:
         code = message.text.split(maxsplit=1)[1]
 
@@ -389,7 +407,7 @@ async def go_exec(_: Client, message: Message):
         return await message.edit_text("<b>Code to execute isn't provided</b>")
 
     if message.command[0] == "rgo":
-        code = message.reply_to_message.text
+        code = extract_code_from_reply(message, "go")
     else:
         code = message.text.split(maxsplit=1)[1]
 
@@ -455,7 +473,7 @@ async def node_exec(_: Client, message: Message):
         return await message.edit_text("<b>Code to execute isn't provided</b>")
 
     if message.command[0] == "rnode":
-        code = message.reply_to_message.text
+        code = extract_code_from_reply(message, "javascript")
     else:
         code = message.text.split(maxsplit=1)[1]
 

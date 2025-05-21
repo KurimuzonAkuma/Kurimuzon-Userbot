@@ -17,27 +17,25 @@ async def del_msg(_, message: Message):
 @Client.on_message(~filters.scheduled & command("purge") & filters.me & ~filters.forwarded)
 @with_reply
 async def purge(client: Client, message: Message):
-    chunk = []
+    message_ids = []
 
     async for msg in client.get_chat_history(
         chat_id=message.chat.id,
         min_id=message.reply_to_message.id - 1,
+        max_id=message.id + 1,
     ):
-        if msg.id < message.reply_to_message.id:
-            break
-
         if message.message_thread_id != msg.message_thread_id:
             continue
 
-        chunk.append(msg.id)
+        message_ids.append(msg.id)
 
-        if len(chunk) >= 100:
-            await client.delete_messages(message.chat.id, chunk)
-            chunk.clear()
+        if len(message_ids) >= 100:
+            await client.delete_messages(message.chat.id, message_ids)
+            message_ids.clear()
             await asyncio.sleep(1)
 
-    if chunk:
-        await client.delete_messages(message.chat.id, chunk)
+    if message_ids:
+        await client.delete_messages(message.chat.id, message_ids)
 
 
 @Client.on_message(command(["tagall"]) & filters.me)

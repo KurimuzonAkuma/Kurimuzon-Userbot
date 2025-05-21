@@ -24,7 +24,7 @@ async def search_user(client: Client, user_id: int):
 
 @Client.on_message(command(["spowner"]) & filters.me)
 @with_reply
-async def calc(client: Client, message: Message):
+async def sticker_pack_owner(client: Client, message: Message):
     input_sticker_set = None
 
     if message.reply_to_message.sticker:
@@ -61,7 +61,7 @@ async def calc(client: Client, message: Message):
 
     owner_id = r.set.id >> 32
 
-    if (r.set_id >> 16 & 0xFF) == 0x3f:
+    if (r.set_id >> 16 & 0xFF) == 0x3F:
         owner_id |= 0x80000000
 
     if r.set.id >> 24 & 0xFF:
