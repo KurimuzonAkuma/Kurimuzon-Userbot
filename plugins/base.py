@@ -1,13 +1,13 @@
-import datetime
 import os
 import subprocess
 import sys
+from pathlib import Path
 from time import perf_counter
 
 import git
 import pyrogram
 from pyrogram import Client, filters
-from pyrogram.types import Message, LinkPreviewOptions
+from pyrogram.types import LinkPreviewOptions, Message
 
 from utils.db import db
 from utils.filters import command
@@ -21,6 +21,7 @@ from utils.scripts import (
     shell_exec,
     time_diff,
     with_args,
+    format_bytes
 )
 
 
@@ -176,7 +177,7 @@ async def sendmod(client: Client, message: Message):
 
 
 @Client.on_message(~filters.scheduled & command(["status"]) & filters.me & ~filters.forwarded)
-async def _status(_, message: Message):
+async def _status(client: Client, message: Message):
     args, _ = get_args(message)
 
     current_hash = git.Repo().head.commit.hexsha
@@ -225,7 +226,15 @@ async def _status(_, message: Message):
     result += f"├─<b>Kernel:</b> <code>{kernel_version}</code>\n"
     result += f"├─<b>Uptime:</b> <code>{system_uptime}</code>\n"
     result += f"├─<b>CPU usage:</b> <code>{cpu_usage}%</code>\n"
-    result += f"└─<b>RAM usage:</b> <code>{ram_usage}MB</code>"
+    result += f"└─<b>RAM usage:</b> <code>{ram_usage}MB</code>\n\n"
+
+    known_peers, known_usernames = client.storage.conn.execute("SELECT (SELECT COUNT(id) FROM peers) AS peer_count, (SELECT COUNT(username) FROM usernames) AS username_count").fetchone()
+    session_size = Path(f"{client.name}.session").stat().st_size
+
+    result += "<b>Session info:</b>\n"
+    result += f"├─<b>Known peers:</b> <code>{known_peers:,}</code>\n"
+    result += f"├─<b>Known usernames:</b> <code>{known_usernames:,}</code>\n"
+    result += f"└─<b>Session size:</b> <code>{format_bytes(session_size)}</code>"
 
     await message.edit(result, link_preview_options=LinkPreviewOptions(is_disabled=True))
 

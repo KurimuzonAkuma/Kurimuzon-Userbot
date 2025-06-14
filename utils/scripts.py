@@ -449,10 +449,11 @@ async def shell_exec(
     timeout: Optional[Union[int, float]] = None,
     stdout=asyncio.subprocess.PIPE,
     stderr=asyncio.subprocess.PIPE,
+    cwd: Optional[str] = None,
 ) -> Tuple[int, str, str]:
     """Executes shell command and returns tuple with return code, decoded stdout and stderr"""
     process = await asyncio.create_subprocess_shell(
-        cmd=command, stdout=stdout, stderr=stderr, shell=True, executable=executable
+        cmd=command, stdout=stdout, stderr=stderr, shell=True, executable=executable, cwd=cwd
     )
 
     try:
@@ -635,3 +636,12 @@ def parse_duration(duration_str: str) -> int:
         return value * 31536000  # 365 дней в год
     else:
         return None
+
+def format_bytes(bytes, units = ["B", "KB", "MB", "GB", "TB"]) -> str:
+    i = 0
+
+    while bytes >= 1024 and i < len(units) - 1:
+        bytes /= 1024.0
+        i += 1
+
+    return "{:.2f}{}".format(bytes, units[i])
