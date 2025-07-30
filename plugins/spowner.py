@@ -10,7 +10,7 @@ from utils.scripts import with_reply
 async def search_user(client: Client, user_id: int):
     try:
         r = await client.get_inline_bot_results(
-            bot="@tgdb_bot",
+            bot="@TgDBSearchBot",
             query=str(user_id),
         )
 
