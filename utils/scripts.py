@@ -6,6 +6,7 @@ import random
 import re
 import shlex
 import string
+import subprocess
 import time
 import traceback
 from time import perf_counter
@@ -452,17 +453,23 @@ async def shell_exec(
     cwd: Optional[str] = None,
 ) -> Tuple[int, str, str]:
     """Executes shell command and returns tuple with return code, decoded stdout and stderr"""
-    process = await asyncio.create_subprocess_shell(
-        cmd=command, stdout=stdout, stderr=stderr, shell=True, executable=executable, cwd=cwd
-    )
+    def run_command():
+        process = subprocess.Popen(
+            command,
+            shell=True,
+            executable=executable,
+            stdout=stdout,
+            stderr=stderr,
+            cwd=cwd
+        )
+        try:
+            out, err = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            raise
+        return process.returncode, out.decode(errors="replace"), err.decode(errors="replace")
 
-    try:
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout)
-    except asyncio.exceptions.TimeoutError as e:
-        process.kill()
-        raise e
-
-    return process.returncode, stdout.decode(), stderr.decode()
+    return await asyncio.to_thread(run_command)
 
 
 async def handle_restart(client: Client):

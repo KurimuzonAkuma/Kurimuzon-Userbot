@@ -1,26 +1,31 @@
 import asyncio
 import html
+import logging
+import random
 import re
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
-from io import StringIO
+from io import BytesIO, StringIO
 from time import perf_counter
-from traceback import print_exc
-import random
+from traceback import format_exc
 from typing import Optional
 
 from pyrogram import Client, enums, filters, raw, types
-from pyrogram.types import Message, LinkPreviewOptions
+from pyrogram import utils as pyroutils
+from pyrogram.types import LinkPreviewOptions, Message
 
 from utils.db import db
 from utils.filters import command
 from utils.misc import modules_help
 from utils.scripts import paste_yaso, shell_exec
 
+log = logging.getLogger(__name__)
 
-async def aexec(code, client, message, timeout=None):
+
+async def aexec(code, client: Client, message: Message, timeout=None):
     exec_globals = {
         "app": client,
+        "c": client,
         "m": message,
         "r": message.reply_to_message,
         "u": message.from_user,
@@ -29,8 +34,11 @@ async def aexec(code, client, message, timeout=None):
         "here": message.chat.id,
         "db": db,
         "raw": raw,
+        "rf": raw.functions,
+        "rt": raw.types,
         "types": types,
         "enums": enums,
+        "utils": pyroutils,
     }
 
     exec(
@@ -71,12 +79,11 @@ def extract_code_from_reply(message: Message, language: str = None) -> Optional[
 
 @Client.on_message(~filters.scheduled & command(["py", "rpy"]) & filters.me & ~filters.forwarded)
 async def python_exec(client: Client, message: Message):
-    command = message.command[0]
     code = ""
 
-    if command == "rpy":
+    if message.command[0] == "rpy":
         code = extract_code_from_reply(message, "python") or ""
-    elif command == "py":
+    elif message.command[0] == "py":
         parts = message.content.split(maxsplit=1)
         code = parts[1] if len(parts) > 1 else ""
 
@@ -101,15 +108,22 @@ async def python_exec(client: Client, message: Message):
             link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
     except Exception as e:
-        err = StringIO()
-        with redirect_stderr(err):
-            print_exc()
+        with redirect_stderr(StringIO()):
+            err = "\n".join(
+                line
+                for i, line in enumerate(format_exc().splitlines(), start=1)
+                if not 2 <= i <= 9
+            )
+
+        log.info("Exception from executed code:")
+        for line in err.splitlines():
+            log.info(f"\033[31m{line}\033[0m")
 
         return await message.edit_text(
             code_result.format(
                 pre_language="python",
                 code=html.escape(code),
-                result=f"<blockquote><emoji id=5465665476971471368>❌</emoji> {e.__class__.__name__}: {e}</blockquote>\nTraceback: {html.escape(await paste_yaso(err.getvalue()))}",
+                result=f"<blockquote><emoji id=5465665476971471368>❌</emoji> {e.__class__.__name__}: {e}</blockquote>\nTraceback: {html.escape(await paste_yaso(err))}",
             ),
             link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
@@ -117,6 +131,7 @@ async def python_exec(client: Client, message: Message):
     # Replace account phone number to anonymous
     random_phone_number = "".join(str(random.randint(0, 9)) for _ in range(8))
     result = result.replace(client.me.phone_number, f"888{random_phone_number}")
+
     paste_result = ""
 
     if not result:
@@ -125,45 +140,44 @@ async def python_exec(client: Client, message: Message):
         paste_result = html.escape(await paste_yaso(result))
 
         if paste_result == "Pasting failed":
-            with open("error.log", "w") as file:
-                file.write(result)
-            result = ""
+            error_bytes = BytesIO(result.encode("utf-8"))
+            error_bytes.seek(0)
+            error_bytes.name = "result.log"
+
+            return await message.reply_document(
+                document=error_bytes,
+                caption=code_result.format(
+                    pre_language="python",
+                    code=html.escape(code),
+                    result=f"<blockquote><emoji id=5472164874886846699>✨</emoji> Result is too long</blockquote>\n"
+                    f"<i>Completed in {elapsed}s.</i>",
+                ),
+            )
 
     elif not re.match(r"^(https?):\/\/[^\s\/$.?#].[^\s]*$", result):
         result = f"<pre>{html.escape(result)}</pre>"
 
-    if result:
-        if paste_result:
-            return await message.edit_text(
-                code_result.format(
-                    pre_language="python",
-                    code=html.escape(code),
-                    result=f"<blockquote><emoji id=5472164874886846699>✨</emoji> Result:</blockquote>\n"
-                    f"<pre>{result[:512]}...</pre>\n<blockquote><b><a href='{paste_result}'>More</a></b></blockquote>\n"
-                    f"<i>Completed in {elapsed}s.</i>",
-                ),
-                link_preview_options=LinkPreviewOptions(is_disabled=True),
-            )
-        else:
-            return await message.edit_text(
-                code_result.format(
-                    pre_language="python",
-                    code=html.escape(code),
-                    result=f"<blockquote><emoji id=5472164874886846699>✨</emoji> Result:</blockquote>\n"
-                    f"{result}\n"
-                    f"<i>Completed in {elapsed}s.</i>",
-                ),
-                link_preview_options=LinkPreviewOptions(is_disabled=True),
-            )
-    else:
-        return await message.reply_document(
-            document="error.log",
-            caption=code_result.format(
+    if paste_result:
+        return await message.edit_text(
+            code_result.format(
                 pre_language="python",
                 code=html.escape(code),
-                result=f"<blockquote><emoji id=5472164874886846699>✨</emoji> Result is too long</blockquote>\n"
+                result=f"<blockquote><emoji id=5472164874886846699>✨</emoji> Result:</blockquote>\n"
+                f"<pre>{result[:512]}...</pre>\n<blockquote><b><a href='{paste_result}'>More</a></b></blockquote>\n"
                 f"<i>Completed in {elapsed}s.</i>",
             ),
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
+        )
+    else:
+        return await message.edit_text(
+            code_result.format(
+                pre_language="python",
+                code=html.escape(code),
+                result=f"<blockquote><emoji id=5472164874886846699>✨</emoji> Result:</blockquote>\n"
+                f"{result}\n"
+                f"<i>Completed in {elapsed}s.</i>",
+            ),
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
 
 
