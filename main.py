@@ -11,7 +11,7 @@ from pyrogram import enums, idle, raw
 from utils.client import CustomClient
 from utils.misc import env, scheduler, scheduler_jobs
 from utils.scripts import Formatter, get_proxy, handle_restart
-from utils.storage import FernetStorage
+from utils.storage import EncryptedFernetStorage
 
 os.chdir(pathlib.Path(__file__).parent)
 
@@ -46,7 +46,11 @@ async def main():
     )
 
     # For security purposes
-    app.storage = FernetStorage(client=app, key=bytes(env.str("FERNET_KEY"), "utf-8"))
+    app.storage = EncryptedFernetStorage(
+        client=app,
+        key=bytes(env.str("FERNET_KEY"), "utf-8"),
+        use_wal=True
+    )
 
     raw.functions.account.DeleteAccount = raw.functions.Ping
 

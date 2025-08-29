@@ -6,13 +6,14 @@ from time import perf_counter
 
 import git
 import pyrogram
-from pyrogram import Client, filters
+from pyrogram import Client, filters, raw
 from pyrogram.types import LinkPreviewOptions, Message
 
 from utils.db import db
 from utils.filters import command
 from utils.misc import modules_help, uptime
 from utils.scripts import (
+    format_bytes,
     format_exc,
     get_args,
     get_cpu_usage,
@@ -20,8 +21,7 @@ from utils.scripts import (
     get_ram_usage,
     shell_exec,
     time_diff,
-    with_args,
-    format_bytes
+    with_args
 )
 
 
@@ -240,11 +240,13 @@ async def _status(client: Client, message: Message):
 
 
 @Client.on_message(~filters.scheduled & command(["ping", "p"]) & filters.me & ~filters.forwarded)
-async def ping(_, message: Message):
+async def ping(client: Client, message: Message):
     start = perf_counter()
-    await message.edit("<b>Pong!</b>")
+    await client.invoke(
+        raw.functions.Ping(ping_id=0)
+    )
     end = perf_counter()
-    await message.edit(f"<b>Pong! {round(end - start, 3)}s</b>")
+    await message.edit(f"<b>Pong! {int((end - start) * 1000)}ms</b>")
 
 
 module = modules_help.add_module("base", __file__)

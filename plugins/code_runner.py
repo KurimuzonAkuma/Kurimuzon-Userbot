@@ -10,6 +10,7 @@ from time import perf_counter
 from traceback import format_exc
 from typing import Optional
 
+import pyrogram
 from pyrogram import Client, enums, filters, raw, types
 from pyrogram import utils as pyroutils
 from pyrogram.types import LinkPreviewOptions, Message
@@ -39,6 +40,8 @@ async def aexec(code, client: Client, message: Message, timeout=None):
         "types": types,
         "enums": enums,
         "utils": pyroutils,
+        "pyrogram": pyrogram,
+        "asyncio": asyncio
     }
 
     exec(
