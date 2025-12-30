@@ -91,7 +91,7 @@ EOL
     echo "Kurimuzon-Userbot installed successfully and running now!"
     echo "Installation type: Systemd service"
     printf "Start with: \e[0;36msudo systemctl start Kurimuzon-Userbot\e[0m\n"
-    printf "Stop with: \e[0;36msudo systemctl start Kurimuzon-Userbot\e[0m\n"
+    printf "Stop with: \e[0;36msudo systemctl stop Kurimuzon-Userbot\e[0m\n"
     echo "============================"
 }
 
