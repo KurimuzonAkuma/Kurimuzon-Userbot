@@ -57,7 +57,7 @@ async def help_cmd(_, message: Message):
 
 
 @Client.on_message(~filters.scheduled & command(["restart"]) & filters.me & ~filters.forwarded)
-async def _restart(_: Client, message: Message):
+async def _restart(client: Client, message: Message):
     db.set(
         "core.updater",
         "restart_info",
@@ -66,14 +66,15 @@ async def _restart(_: Client, message: Message):
             "message_id": message.id,
             "time": perf_counter(),
             "type": "restart",
-        },
+        }
     )
+
     await message.edit("<code>Restarting...</code>")
     os.execvp(sys.executable, [sys.executable, *sys.argv])
 
 
 @Client.on_message(~filters.scheduled & command(["update"]) & filters.me & ~filters.forwarded)
-async def _update(_: Client, message: Message):
+async def _update(client: Client, message: Message):
     await message.edit("<code>Updating...</code>")
     args, nargs = get_args(message)
 
@@ -113,7 +114,7 @@ async def _update(_: Client, message: Message):
             "hash": current_hash,
             "version": f"{current_version}",
             "type": "update",
-        },
+        }
     )
 
     try:
@@ -139,7 +140,7 @@ async def _update(_: Client, message: Message):
 @Client.on_message(
     ~filters.scheduled & command(["kprefix", "prefix"]) & filters.me & ~filters.forwarded
 )
-async def set_prefix(_, message: Message):
+async def set_prefix(client: Client, message: Message):
     args, _ = get_args(message)
     prefix = get_prefix()
 
@@ -228,7 +229,7 @@ async def _status(client: Client, message: Message):
     result += f"├─<b>CPU usage:</b> <code>{cpu_usage}%</code>\n"
     result += f"└─<b>RAM usage:</b> <code>{ram_usage}MB</code>\n\n"
 
-    known_peers, known_usernames = client.storage.conn.execute("SELECT (SELECT COUNT(id) FROM peers) AS peer_count, (SELECT COUNT(username) FROM usernames) AS username_count").fetchone()
+    known_peers, known_usernames = await (await client.storage.conn.execute("SELECT (SELECT COUNT(id) FROM peers) AS peer_count, (SELECT COUNT(username) FROM usernames) AS username_count")).fetchone()
     session_size = Path(f"{client.name}.session").stat().st_size
 
     result += "<b>Session info:</b>\n"

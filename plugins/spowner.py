@@ -10,7 +10,7 @@ from utils.scripts import with_reply
 async def search_user(client: Client, user_id: int):
     try:
         r = await client.get_inline_bot_results(
-            bot="@TgDBSearchBot",
+            bot="@tgdb_search_bot",
             query=str(user_id),
         )
 
@@ -61,7 +61,7 @@ async def sticker_pack_owner(client: Client, message: Message):
 
     owner_id = r.set.id >> 32
 
-    if (r.set_id >> 16 & 0xFF) == 0x3F:
+    if (r.set.id >> 16 & 0xFF) == 0x3F:
         owner_id |= 0x80000000
 
     if r.set.id >> 24 & 0xFF:

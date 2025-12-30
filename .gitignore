@@ -6,8 +6,14 @@ __pycache__
 *.db
 *.session
 *.session-journal
-screenlog.0
+*.session-shm
+*.session-wal
+*.0
 
 custom_modules/
 downloads/
 *.py1
+
+.gitignore
+unknown_errors.txt
+init_connection_params.json

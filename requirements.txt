@@ -1,4 +1,5 @@
 aiohttp
+aiosqlite
 apscheduler
 environs
 GitPython
@@ -6,4 +7,4 @@ kurigram
 psutil
 tgcrypto
 qrcode
-cryptography
+pycryptodome

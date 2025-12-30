@@ -12,7 +12,7 @@ from utils.scripts import shell_exec
 
 
 @Client.on_message(
-    ~filters.scheduled & command(["vnote", "rvnote"]) & filters.me & ~filters.forwarded
+    ~filters.scheduled & command(["vnote"]) & filters.me & ~filters.forwarded
 )
 async def vnote(_: Client, message: Message):
     if not shutil.which("ffmpeg"):
@@ -21,9 +21,7 @@ async def vnote(_: Client, message: Message):
     if message.media:
         message.empty = bool(await message.delete())
 
-    is_reply = message.command[0] == "rvnote"
-
-    if is_reply:
+    if not message.media and message.reply_to_message and message.reply_to_message.media:
         msg = message.reply_to_message
     else:
         msg = message
@@ -78,5 +76,5 @@ async def vnote(_: Client, message: Message):
 
 module = modules_help.add_module("vnote", __file__)
 module.add_command(
-    "vnote", "Make video note from message or reply media", "[reply]", aliases=["rvnote"]
+    "vnote", "Make video note from message or reply media", "[reply]"
 )

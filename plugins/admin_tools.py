@@ -31,7 +31,7 @@ async def kick_delete_handler(client: Client, message: Message):
 
 @Client.on_message(command(["ban"]) & filters.me)
 async def ban_handler(client: Client, message: Message):
-    if message.chat.type not in (enums.ChatType.SUPERGROUP, enums.ChatType.GROUP):
+    if message.chat.type not in (enums.ChatType.FORUM, enums.ChatType.SUPERGROUP, enums.ChatType.GROUP):
         return await message.edit("Invalid chat type")
 
     args, _ = get_args(message)
@@ -66,7 +66,7 @@ async def ban_handler(client: Client, message: Message):
 
 @Client.on_message(command(["unban"]) & filters.me)
 async def unban_handler(client: Client, message: Message):
-    if message.chat.type not in (enums.ChatType.SUPERGROUP, enums.ChatType.GROUP):
+    if message.chat.type not in (enums.ChatType.FORUM, enums.ChatType.SUPERGROUP, enums.ChatType.GROUP):
         return await message.edit("Invalid chat type")
 
     args, _ = get_args(message)

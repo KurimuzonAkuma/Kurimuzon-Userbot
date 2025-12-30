@@ -1,15 +1,16 @@
 import base64
+import json
 import logging
 import struct
 import time
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
-from cryptography.fernet import Fernet
+import aiosqlite
 from pyrogram import Client, raw, utils
 from pyrogram.storage import Storage
 
-import aiosqlite
+from utils.scripts import decrypt, encrypt
 
 log = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ CREATE TABLE sessions
     test_mode      INTEGER,
     auth_key       BLOB,
     date           INTEGER NOT NULL,
-    user_id        INTEGER,
+    user_id        BLOB,
     is_bot         INTEGER
 );
 
@@ -102,31 +103,26 @@ PROD = {
     3: "149.154.175.100",
     4: "149.154.167.91",
     5: "91.108.56.130",
-    203: "91.105.192.100"
+    203: "91.105.192.100",
 }
+
 
 def get_input_peer(peer_id: int, access_hash: int, peer_type: str):
     if peer_type in ["user", "bot"]:
-        return raw.types.InputPeerUser(
-            user_id=peer_id,
-            access_hash=access_hash
-        )
+        return raw.types.InputPeerUser(user_id=peer_id, access_hash=access_hash)
 
     if peer_type == "group":
-        return raw.types.InputPeerChat(
-            chat_id=-peer_id
-        )
+        return raw.types.InputPeerChat(chat_id=-peer_id)
 
     if peer_type in ["direct", "channel", "forum", "supergroup"]:
         return raw.types.InputPeerChannel(
-            channel_id=utils.get_channel_id(peer_id),
-            access_hash=access_hash
+            channel_id=utils.get_channel_id(peer_id), access_hash=access_hash
         )
 
     raise ValueError(f"Invalid peer type: {peer_type}")
 
 
-class EncryptedFernetStorage(Storage):
+class EncryptedStorage(Storage):
     VERSION = 7
     USERNAME_TTL = 8 * 60 * 60
     FILE_EXTENSION = ".session"
@@ -134,13 +130,14 @@ class EncryptedFernetStorage(Storage):
     def __init__(
         self,
         client: Client,
-        key: bytes,
+        password: bytes,
         use_wal: Optional[bool] = False,
     ):
         super().__init__(client.name)
 
+        self.password = password
+
         self.conn = None  # type: aiosqlite.Connection
-        self.fernet = Fernet(key)
 
         self.session_string = client.session_string
         self.in_memory = client.in_memory
@@ -282,24 +279,34 @@ class EncryptedFernetStorage(Storage):
         await self.conn.commit()
 
     async def close(self):
-        await self.conn.close()
+        if self.conn:
+            await self.conn.close()
+            self.conn = None
 
     async def delete(self):
-        if not self.in_memory:
+        if not self.in_memory and Path(self.database).exists():
             Path(self.database).unlink()
 
     async def update_peers(self, peers: List[Tuple[int, int, str, str]]):
-        await self.conn.executemany(
-            "REPLACE INTO peers (id, access_hash, type, phone_number) VALUES (?, ?, ?, ?)", peers
-        )
+        async with self.conn.execute("BEGIN"):
+            await self.conn.executemany(
+                "REPLACE INTO peers (id, access_hash, type, phone_number) VALUES (?, ?, ?, ?)", peers
+            )
+
+        await self.conn.commit()
 
     async def update_usernames(self, usernames: List[Tuple[int, List[str]]]):
-        await self.conn.executemany("DELETE FROM usernames WHERE id = ?", [(id,) for id, _ in usernames])
+        async with self.conn.execute("BEGIN"):
+            await self.conn.executemany(
+                "DELETE FROM usernames WHERE id = ?", [(id,) for id, _ in usernames]
+            )
 
-        await self.conn.executemany(
-            "REPLACE INTO usernames (id, username) VALUES (?, ?)",
-            [(id, username) for id, usernames in usernames for username in usernames],
-        )
+            await self.conn.executemany(
+                "REPLACE INTO usernames (id, username) VALUES (?, ?)",
+                [(id, username) for id, usernames in usernames for username in usernames],
+            )
+
+        await self.conn.commit()
 
     async def update_state(self, value: Tuple[int, int, int, int, int] = object):
         if value is object:
@@ -318,10 +325,11 @@ class EncryptedFernetStorage(Storage):
                 )
 
     async def get_peer_by_id(self, peer_id: int):
-        r = await (await self.conn.execute(
-            "SELECT id, access_hash, type FROM peers WHERE id = ?",
-            (peer_id,)
-        )).fetchone()
+        r = await (
+            await self.conn.execute(
+                "SELECT id, access_hash, type FROM peers WHERE id = ?", (peer_id,)
+            )
+        ).fetchone()
 
         if r is None:
             raise KeyError(f"ID not found: {peer_id}")
@@ -329,13 +337,15 @@ class EncryptedFernetStorage(Storage):
         return get_input_peer(*r)
 
     async def get_peer_by_username(self, username: str):
-        r = await (await self.conn.execute(
-            "SELECT p.id, p.access_hash, p.type, p.last_update_on FROM peers p "
-            "JOIN usernames u ON p.id = u.id "
-            "WHERE u.username = ? "
-            "ORDER BY p.last_update_on DESC",
-            (username,)
-        )).fetchone()
+        r = await (
+            await self.conn.execute(
+                "SELECT p.id, p.access_hash, p.type, p.last_update_on FROM peers p "
+                "JOIN usernames u ON p.id = u.id "
+                "WHERE u.username = ? "
+                "ORDER BY p.last_update_on DESC",
+                (username,),
+            )
+        ).fetchone()
 
         if r is None:
             raise KeyError(f"Username not found: {username}")
@@ -346,10 +356,11 @@ class EncryptedFernetStorage(Storage):
         return get_input_peer(*r[:3])
 
     async def get_peer_by_phone_number(self, phone_number: str):
-        r = await (await self.conn.execute(
-            "SELECT id, access_hash, type FROM peers WHERE phone_number = ?",
-            (phone_number,)
-        )).fetchone()
+        r = await (
+            await self.conn.execute(
+                "SELECT id, access_hash, type FROM peers WHERE phone_number = ?", (phone_number,)
+            )
+        ).fetchone()
 
         if r is None:
             raise KeyError(f"Phone number not found: {phone_number}")
@@ -366,7 +377,11 @@ class EncryptedFernetStorage(Storage):
         await self.conn.commit()
 
     async def _accessor(self, table: str, attr: str, value: Any = object):
-        return await self._get(table, attr) if value is object else await self._set(table, attr, value)
+        return (
+            await self._get(table, attr)
+            if value is object
+            else await self._set(table, attr, value)
+        )
 
     async def dc_id(self, value: int = object):
         return await self._accessor("sessions", "dc_id", value)
@@ -386,15 +401,19 @@ class EncryptedFernetStorage(Storage):
     async def auth_key(self, value: bytes = object):
         if value is object:
             r = await self._accessor("sessions", "auth_key", value)
-            return self.fernet.decrypt(r) if r else None
+            return decrypt(r, self.password) if r else None
         else:
-            return await self._accessor("sessions", "auth_key", self.fernet.encrypt(value))
+            return await self._accessor("sessions", "auth_key", encrypt(value, self.password))
 
     async def date(self, value: int = object):
         return await self._accessor("sessions", "date", value)
 
     async def user_id(self, value: int = object):
-        return await self._accessor("sessions", "user_id", value)
+        if value is object:
+            r = await self._accessor("sessions", "user_id", value)
+            return decrypt(r, self.password).decode() if r else None
+        else:
+            return await self._accessor("sessions", "user_id", encrypt(value, self.password))
 
     async def is_bot(self, value: bool = object):
         return await self._accessor("sessions", "is_bot", value)

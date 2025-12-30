@@ -1,9 +1,11 @@
 import asyncio
 import datetime
+import json
 import logging
 import os
 import random
 import re
+import secrets
 import shlex
 import string
 import subprocess
@@ -16,6 +18,10 @@ import aiohttp
 import git
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+from Crypto.Cipher import AES
+from Crypto.Hash import SHA256
+from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Random import get_random_bytes
 from pyrogram import Client, errors
 from pyrogram.types import Message
 
@@ -81,6 +87,14 @@ def get_proxy(proxies_path: str = "proxies.txt") -> dict:
         proxy = dict(scheme=protocol, server=proxy[0])
 
     return proxy
+
+
+def get_init_connection_params(params_path: str = "init_connection_params.json") -> dict:
+    try:
+        with open(params_path, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
 
 
 def format_exc(e: Exception, suffix="") -> str:
@@ -453,6 +467,7 @@ async def shell_exec(
     cwd: Optional[str] = None,
 ) -> Tuple[int, str, str]:
     """Executes shell command and returns tuple with return code, decoded stdout and stderr"""
+
     def run_command():
         process = subprocess.Popen(
             command,
@@ -644,7 +659,8 @@ def parse_duration(duration_str: str) -> int:
     else:
         return None
 
-def format_bytes(bytes, units = ["B", "KB", "MB", "GB", "TB"]) -> str:
+
+def format_bytes(bytes, units=["B", "KB", "MB", "GB", "TB"]) -> str:
     i = 0
 
     while bytes >= 1024 and i < len(units) - 1:
@@ -652,3 +668,75 @@ def format_bytes(bytes, units = ["B", "KB", "MB", "GB", "TB"]) -> str:
         i += 1
 
     return "{:.2f}{}".format(bytes, units[i])
+
+
+def format_time(seconds: float) -> str:
+    seconds = int(seconds)
+    d, rem = divmod(seconds, 86400)  # дни
+    h, rem = divmod(rem, 3600)  # часы
+    m, s = divmod(rem, 60)  # минуты и секунды
+
+    if d > 0:
+        if h > 0:
+            return f"{d}d:{h}h"
+        else:
+            return f"{d}d"
+    elif h > 0:
+        if m > 0:
+            return f"{h}h:{m}m"
+        else:
+            return f"{h}h"
+    elif m > 0:
+        if s > 0:
+            return f"{m}m:{s}s"
+        else:
+            return f"{m}m"
+    else:
+        return f"{s}s"
+
+
+def encrypt(data: bytes, password: str) -> bytes:
+    if isinstance(data, str):
+        data = data.encode()
+
+    key_hash = SHA256.new(data).digest()
+    plaintext = key_hash + data
+
+    salt = get_random_bytes(16)
+    iv = get_random_bytes(16)
+
+    aes_cipher = AES.new(PBKDF2(password, salt, dkLen=32, count=100_000), AES.MODE_CBC, iv)
+
+    pad_len = 16 - len(plaintext) % 16
+    padded = plaintext + bytes([pad_len]) * pad_len
+
+    return salt + iv + aes_cipher.encrypt(padded)
+
+
+def decrypt(data: bytes, password: str) -> bytes:
+    if len(data) < 32:
+        raise ValueError("Invalid data format")
+
+    salt = data[:16]
+    iv = data[16:32]
+    ciphertext = data[32:]
+
+    aes_cipher = AES.new(PBKDF2(password, salt, dkLen=32, count=100_000), AES.MODE_CBC, iv)
+    decrypted = aes_cipher.decrypt(ciphertext)
+
+    pad_len = decrypted[-1]
+
+    if not 1 <= pad_len <= 16:
+        raise ValueError("Invalid padding")
+
+    plaintext = decrypted[:-pad_len]
+
+    stored_hash = plaintext[:32]
+    decoded_data = plaintext[32:]
+
+    computed_hash = SHA256.new(decoded_data).digest()
+
+    if not secrets.compare_digest(stored_hash, computed_hash):
+        raise ValueError("Invalid password or corrupted data")
+
+    return decoded_data

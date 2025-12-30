@@ -10,8 +10,8 @@ from pyrogram import enums, idle, raw
 
 from utils.client import CustomClient
 from utils.misc import env, scheduler, scheduler_jobs
-from utils.scripts import Formatter, get_proxy, handle_restart
-from utils.storage import EncryptedFernetStorage
+from utils.scripts import Formatter, get_proxy, handle_restart, get_init_connection_params
+from utils.storage import EncryptedStorage
 
 os.chdir(pathlib.Path(__file__).parent)
 
@@ -32,7 +32,7 @@ async def main():
         api_hash=env.str("API_HASH", None) or "eb06d4abfb49dc3eeb1aeb98ae0f581e",
         device_model=env.str("DEVICE_MODEL", None) or "Samsung SM-S931B",
         system_version=env.str("SYSTEM_VERSION", None) or "15 (35)",
-        app_version=env.str("APP_VERSION", None) or "11.7.0 (56631)",
+        app_version=env.str("APP_VERSION", None) or "12.0.0 (61631)",
         lang_pack=env.str("LANG_PACK", None) or "android",
         lang_code=env.str("LANG_CODE", None) or "jabka",
         client_platform=enums.ClientPlatform.ANDROID,
@@ -43,18 +43,23 @@ async def main():
         parse_mode=enums.ParseMode.HTML,
         skip_updates=False,
         proxy=get_proxy(),
+        init_connection_params=get_init_connection_params()
     )
 
     # For security purposes
-    app.storage = EncryptedFernetStorage(
+    app.storage = EncryptedStorage(
         client=app,
-        key=bytes(env.str("FERNET_KEY"), "utf-8"),
+        password=bytes(env.str("ENCRYPTION_KEY"), "utf-8"),
         use_wal=True
     )
 
-    raw.functions.account.DeleteAccount = raw.functions.Ping
+    async def warning(*args, **kwargs):
+        await app.send_message("me", "Someone tried to export your session string")
 
-    await app.start(use_qr=True)
+    delattr(raw.functions.account, "DeleteAccount")
+    app.storage.export_session_string = warning
+
+    await app.start(use_qr=False)
 
     async for _ in app.get_dialogs(limit=100):
         pass

@@ -1,6 +1,6 @@
 import asyncio
 
-from pyrogram import Client, filters
+from pyrogram import Client, enums, filters, types
 from pyrogram.types import Message
 
 from utils.filters import command
@@ -40,6 +40,9 @@ async def purge(client: Client, message: Message):
 
 @Client.on_message(command(["tagall"]) & filters.me)
 async def tagall_handler(client: Client, message: Message):
+    if message.chat.type not in (enums.ChatType.FORUM, enums.ChatType.SUPERGROUP, enums.ChatType.GROUP):
+        return await message.edit("Command is only available in groups and supergroups")
+
     await message.delete()
 
     args = get_args_raw(message) or '<a href="tg://settings">@all</a>'
@@ -50,7 +53,10 @@ async def tagall_handler(client: Client, message: Message):
     ]
 
     for i in range(0, len(tags), 5):
-        await message.reply(args + "".join(tags[i : i + 5]), quote=False)
+        await message.reply(
+            args + "".join(tags[i : i + 5]),
+            reply_parameters=types.ReplyParameters(message_id=message.reply_to_message_id),
+        )
         await asyncio.sleep(0.1)
 
 

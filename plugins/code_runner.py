@@ -1,9 +1,11 @@
 import asyncio
+import contextlib
 import html
 import logging
 import random
 import re
 import tempfile
+import time
 from contextlib import redirect_stderr, redirect_stdout
 from io import BytesIO, StringIO
 from time import perf_counter
@@ -18,10 +20,60 @@ from pyrogram.types import LinkPreviewOptions, Message
 from utils.db import db
 from utils.filters import command
 from utils.misc import modules_help
-from utils.scripts import paste_yaso, shell_exec
+from utils.scripts import format_bytes, format_time, paste_yaso, shell_exec
 
 log = logging.getLogger(__name__)
 
+async def progress(
+    current: int,
+    total: int,
+    message: Optional["Message"] = None,
+    update_interval: float = 1,
+    width: int = 30,
+    start_time: Optional[float] = None
+) -> str:
+    percentage = min((current / total) * 100, 100)
+    filled = int((current / total) * width)
+    bar = '█' * filled + '░' * (width - filled)
+
+    is_download_done = total == 0 or current == total
+
+    if is_download_done:
+        percentage = "Done!"
+    else:
+        percentage = f"{percentage:5.1f}%"
+
+    result = f"{percentage} |{bar}| [{format_bytes(current)}/{format_bytes(total)}"
+
+    if start_time is not None:
+        elapsed_time = time.time() - start_time
+
+        if current > 0 and elapsed_time > 0:
+            speed = current / elapsed_time
+
+            result += f", {format_bytes(speed)}/s"
+
+            if current < total:
+                remaining = total - current
+                eta_seconds = remaining / speed
+
+                if not is_download_done:
+                    result += f", ETA: {format_time(eta_seconds) if speed > 0 else '∞'}"
+
+            result += f", Elapsed: {format_time(elapsed_time)}]"
+    else:
+        result += "]"
+
+    if not is_download_done and (start_time is not None and not elapsed_time % update_interval < 0.1):
+        return None
+
+    log.info(result)
+
+    if message:
+        try:
+            await message.edit(result)
+        except Exception as e:
+            log.error(e)
 
 async def aexec(code, client: Client, message: Message, timeout=None):
     exec_globals = {
@@ -41,6 +93,7 @@ async def aexec(code, client: Client, message: Message, timeout=None):
         "enums": enums,
         "utils": pyroutils,
         "pyrogram": pyrogram,
+        "progress": progress,
         "asyncio": asyncio
     }
 

@@ -5,6 +5,5 @@ services:
       context: .
     stop_signal: SIGINT
     restart: unless-stopped
-    command: "python3 main.py"
     volumes:
       - .:/app

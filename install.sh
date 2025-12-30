@@ -42,7 +42,7 @@ configure_env() {
     fi
 
     cat > .env << EOL
-FERNET_KEY="$(python3 -c "import base64; import os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")"
+ENCRYPTION_KEY="$(python3 -c "import base64; import os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")"
 
 # Connection settings
 API_ID=${api_id}
