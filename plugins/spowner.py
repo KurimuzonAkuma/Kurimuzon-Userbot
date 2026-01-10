@@ -27,7 +27,7 @@ async def search_user(client: Client, user_id: int):
 async def sticker_pack_owner(client: Client, message: Message):
     input_sticker_set = None
 
-    if message.reply_to_message.sticker:
+    if message.reply_to_message.sticker and message.reply_to_message.sticker.set_name:
         input_sticker_set = raw.types.InputStickerSetShortName(
             short_name=message.reply_to_message.sticker.set_name
         )
