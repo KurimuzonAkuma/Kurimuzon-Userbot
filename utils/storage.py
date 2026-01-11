@@ -288,23 +288,21 @@ class EncryptedStorage(Storage):
             Path(self.database).unlink()
 
     async def update_peers(self, peers: List[Tuple[int, int, str, str]]):
-        async with self.conn.execute("BEGIN"):
-            await self.conn.executemany(
-                "REPLACE INTO peers (id, access_hash, type, phone_number) VALUES (?, ?, ?, ?)", peers
-            )
+        await self.conn.executemany(
+            "REPLACE INTO peers (id, access_hash, type, phone_number) VALUES (?, ?, ?, ?)", peers
+        )
 
         await self.conn.commit()
 
     async def update_usernames(self, usernames: List[Tuple[int, List[str]]]):
-        async with self.conn.execute("BEGIN"):
-            await self.conn.executemany(
-                "DELETE FROM usernames WHERE id = ?", [(id,) for id, _ in usernames]
-            )
+        await self.conn.executemany(
+            "DELETE FROM usernames WHERE id = ?", [(id,) for id, _ in usernames]
+        )
 
-            await self.conn.executemany(
-                "REPLACE INTO usernames (id, username) VALUES (?, ?)",
-                [(id, username) for id, usernames in usernames for username in usernames],
-            )
+        await self.conn.executemany(
+            "REPLACE INTO usernames (id, username) VALUES (?, ?)",
+            [(id, username) for id, usernames in usernames for username in usernames],
+        )
 
         await self.conn.commit()
 
@@ -403,7 +401,7 @@ class EncryptedStorage(Storage):
             r = await self._accessor("sessions", "auth_key", value)
             return decrypt(r, self.password) if r else None
         else:
-            return await self._accessor("sessions", "auth_key", encrypt(value, self.password))
+            return await self._accessor("sessions", "auth_key", encrypt(value, self.password) if value is not None else None)
 
     async def date(self, value: int = object):
         return await self._accessor("sessions", "date", value)
@@ -411,9 +409,20 @@ class EncryptedStorage(Storage):
     async def user_id(self, value: int = object):
         if value is object:
             r = await self._accessor("sessions", "user_id", value)
-            return decrypt(r, self.password).decode() if r else None
+            if not r:
+                return None
+
+            decrypted = decrypt(r, self.password)
+            return int(decrypted.decode())
+
         else:
-            return await self._accessor("sessions", "user_id", encrypt(value, self.password))
+            if value is None:
+                encrypted = None
+            else:
+                data = str(value).encode()
+                encrypted = encrypt(data, self.password)
+
+            return await self._accessor("sessions", "user_id", encrypted)
 
     async def is_bot(self, value: bool = object):
         return await self._accessor("sessions", "is_bot", value)

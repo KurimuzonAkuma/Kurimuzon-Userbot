@@ -30,9 +30,9 @@ async def main():
         "KurimuzonUserbot",
         api_id=env.int("API_ID", None) or 6,
         api_hash=env.str("API_HASH", None) or "eb06d4abfb49dc3eeb1aeb98ae0f581e",
-        device_model=env.str("DEVICE_MODEL", None) or "Samsung SM-S931B",
-        system_version=env.str("SYSTEM_VERSION", None) or "15 (35)",
-        app_version=env.str("APP_VERSION", None) or "12.0.0 (61631)",
+        device_model=env.str("DEVICE_MODEL", None) or "Samsung SM-F966B",
+        system_version=env.str("SYSTEM_VERSION", None) or "16 (36)",
+        app_version=env.str("APP_VERSION", None) or "12.3.1 (63852)",
         lang_pack=env.str("LANG_PACK", None) or "android",
         lang_code=env.str("LANG_CODE", None) or "jabka",
         client_platform=enums.ClientPlatform.ANDROID,
@@ -53,11 +53,7 @@ async def main():
         use_wal=True
     )
 
-    async def warning(*args, **kwargs):
-        await app.send_message("me", "Someone tried to export your session string")
-
     delattr(raw.functions.account, "DeleteAccount")
-    app.storage.export_session_string = warning
 
     await app.start(use_qr=False)
 

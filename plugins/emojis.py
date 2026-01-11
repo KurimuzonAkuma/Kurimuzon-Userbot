@@ -28,7 +28,7 @@ async def emojis(_, message: Message):
     if not result:
         return await message.edit_text("No emojis found")
 
-    await message.reply_text("\n".join(result), quote=True)
+    await message.edit_text("\n".join(result))
 
 
 module = modules_help.add_module("emojis", __file__)

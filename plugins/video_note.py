@@ -66,8 +66,7 @@ async def vnote(_: Client, message: Message):
 
         try:
             await msg.reply_video_note(
-                video_note=output_file_path,
-                quote=True,
+                video_note=output_file_path
             )
         except errors.VoiceMessagesForbidden:
             if not message.empty:

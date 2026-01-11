@@ -174,7 +174,7 @@ async def sendmod(client: Client, message: Message):
         else:
             await message.edit(f"<b>Module {module_name} not found!</b>")
     except Exception as e:
-        await message.reply(format_exc(e), quote=False)
+        await message.reply(format_exc(e))
 
 
 @Client.on_message(~filters.scheduled & command(["status"]) & filters.me & ~filters.forwarded)
