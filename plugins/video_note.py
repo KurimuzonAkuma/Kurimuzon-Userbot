@@ -18,7 +18,10 @@ async def vnote(client: Client, message: Message):
     if not shutil.which("ffmpeg"):
         return await message.edit("<b>ffmpeg not installed!</b>")
 
-    if message.media:
+    if message.media and message.media in (
+        enums.MessageMediaType.VIDEO,
+        enums.MessageMediaType.ANIMATION,
+    ):
         message.empty = bool(await message.delete())
 
     if (
