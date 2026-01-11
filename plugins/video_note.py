@@ -3,7 +3,7 @@ import shutil
 import tempfile
 
 from pyrogram import Client, enums, errors, filters
-from pyrogram.types import Message
+from pyrogram.types import Message, ReplyParameters
 
 from utils.db import db
 from utils.filters import command
@@ -14,14 +14,18 @@ from utils.scripts import shell_exec
 @Client.on_message(
     ~filters.scheduled & command(["vnote"]) & filters.me & ~filters.forwarded
 )
-async def vnote(_: Client, message: Message):
+async def vnote(client: Client, message: Message):
     if not shutil.which("ffmpeg"):
         return await message.edit("<b>ffmpeg not installed!</b>")
 
     if message.media:
         message.empty = bool(await message.delete())
 
-    if not message.media and message.reply_to_message and message.reply_to_message.media:
+    if (
+        not message.media
+        and message.reply_to_message
+        and message.reply_to_message.media
+    ):
         msg = message.reply_to_message
     else:
         msg = message
@@ -36,6 +40,14 @@ async def vnote(_: Client, message: Message):
     ):
         if not message.empty:
             return await message.edit_text("<b>Only video and gif supported!</b>")
+
+    chat = await client.get_chat(message.chat.id, force_full=True)
+
+    if not chat.can_send_voice_messages:
+        if not message.empty:
+            return await message.edit_text(
+                "<b>Voice messages are forbidden in this chat.</b>"
+            )
 
     if not message.empty:
         await message.edit_text("<code>Converting video...</code>")
@@ -65,15 +77,24 @@ async def vnote(_: Client, message: Message):
         )
 
         try:
-            await msg.reply_video_note(
-                video_note=output_file_path
+            await client.send_video_note(
+                message.chat.id,
+                video_note=output_file_path,
+                reply_parameters=ReplyParameters(
+                    message_id=msg.id, chat_id=msg.chat.id
+                ),
             )
+        except (errors.ReplyMessageIdInvalid, errors.ChannelInvalid):
+            await message.reply_video_note(video_note=output_file_path)
         except errors.VoiceMessagesForbidden:
             if not message.empty:
-                return await message.edit("<b>Voice messages forbidden in this chat.</b>")
+                return await message.edit(
+                    "<b>Voice messages are forbidden in this chat.</b>"
+                )
+
+    if not message.empty:
+        await message.delete()
 
 
 module = modules_help.add_module("vnote", __file__)
-module.add_command(
-    "vnote", "Make video note from message or reply media", "[reply]"
-)
+module.add_command("vnote", "Make video note from message or reply media", "[reply]")
