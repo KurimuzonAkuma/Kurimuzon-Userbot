@@ -28,10 +28,11 @@ from utils.scripts import (
 @Client.on_message(~filters.scheduled & command(["help", "h"]) & filters.me & ~filters.forwarded)
 async def help_cmd(_, message: Message):
     args, _ = get_args(message)
+    prefix = get_prefix()
+
     try:
         if not args:
             msg_edited = False
-
             for text in modules_help.help():
                 if msg_edited:
                     await message.reply(
@@ -42,14 +43,15 @@ async def help_cmd(_, message: Message):
                         text, link_preview_options=LinkPreviewOptions(is_disabled=True)
                     )
                     msg_edited = True
-        elif args[0] in modules_help.modules:
-            await message.edit(
-                modules_help.module_help(args[0]),
-                link_preview_options=LinkPreviewOptions(is_disabled=True),
-            )
         else:
+            query = args[0].strip(prefix)
+            if query in modules_help.modules:
+                text_result = modules_help.module_help(query)
+            else:
+                text_result = modules_help.command_help(query)
+
             await message.edit(
-                modules_help.command_help(args[0]),
+                text_result,
                 link_preview_options=LinkPreviewOptions(is_disabled=True),
             )
     except ValueError as e:
@@ -191,9 +193,7 @@ async def _status(client: Client, message: Message):
     )
     repo_link = "https://github.com/KurimuzonAkuma/Kurimuzon-Userbot"
 
-    result = (
-        f"<emoji id=5219903664428167948>🤖</emoji> <a href='{repo_link}'>Kurimuzon-Userbot</a> / "
-    )
+    result = f"<emoji id=5219903664428167948>🤖</emoji> <a href='{repo_link}'>Kurimuzon-Userbot</a> / "
     result += f"<a href='{repo_link}/commit/{current_hash}'>#{current_hash[:7]} ({current_version})</a>\n\n"
     result += f"<b>Pyrogram:</b> <code>{pyrogram.__version__}</code>\n"
     result += f"<b>Python:</b> <code>{sys.version}</code>\n"
@@ -208,8 +208,16 @@ async def _status(client: Client, message: Message):
 
     cpu_usage = get_cpu_usage()
     ram_usage = get_ram_usage()
-    kernel_version = subprocess.run(["uname", "-a"], capture_output=True).stdout.decode().strip()
-    system_uptime = subprocess.run(["uptime", "-p"], capture_output=True).stdout.decode().strip()
+
+    try:
+        kernel_version = subprocess.run(["uname", "-a"], capture_output=True).stdout.decode().strip()
+    except Exception:
+        kernel_version = "Unknown"
+
+    try:
+        system_uptime = subprocess.run(["uptime", "-p"], capture_output=True).stdout.decode().strip()
+    except Exception:
+        system_uptime = "Unknown"
 
     result += "<b>Bot status:</b>\n"
     result += f"├─<b>Uptime:</b> <code>{time_diff(uptime)}</code>\n"
