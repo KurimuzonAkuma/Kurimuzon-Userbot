@@ -28,12 +28,11 @@ from utils.scripts import (
 @Client.on_message(~filters.scheduled & command(["help", "h"]) & filters.me & ~filters.forwarded)
 async def help_cmd(_, message: Message):
     args, _ = get_args(message)
-    perfix = get_prefix()
+    prefix = get_prefix()
 
     try:
         if not args:
             msg_edited = False
-
             for text in modules_help.help():
                 if msg_edited:
                     await message.reply(
@@ -44,14 +43,15 @@ async def help_cmd(_, message: Message):
                         text, link_preview_options=LinkPreviewOptions(is_disabled=True)
                     )
                     msg_edited = True
-        elif args[0].strip(perfix) in modules_help.modules:
-            await message.edit(
-                modules_help.module_help(args[0].strip(perfix)),
-                link_preview_options=LinkPreviewOptions(is_disabled=True),
-            )
         else:
+            query = args[0].strip(prefix)
+            if query in modules_help.modules:
+                text_result = modules_help.module_help(query)
+            else:
+                text_result = modules_help.command_help(query)
+
             await message.edit(
-                modules_help.command_help(args[0].strip(perfix)),
+                text_result,
                 link_preview_options=LinkPreviewOptions(is_disabled=True),
             )
     except ValueError as e:
