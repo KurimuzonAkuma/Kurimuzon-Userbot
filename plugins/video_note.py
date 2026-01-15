@@ -18,12 +18,6 @@ async def vnote(client: Client, message: Message):
     if not shutil.which("ffmpeg"):
         return await message.edit("<b>ffmpeg not installed!</b>")
 
-    if message.media and message.media in (
-        enums.MessageMediaType.VIDEO,
-        enums.MessageMediaType.ANIMATION,
-    ):
-        message.empty = bool(await message.delete())
-
     if (
         not message.media
         and message.reply_to_message
@@ -34,23 +28,23 @@ async def vnote(client: Client, message: Message):
         msg = message
 
     if not msg.media:
-        if not message.empty:
-            return await message.edit_text("<b>Message should contain media!</b>")
+        return await message.edit_text("<b>Message should contain media!</b>")
 
     if msg.media not in (
         enums.MessageMediaType.VIDEO,
         enums.MessageMediaType.ANIMATION,
     ):
-        if not message.empty:
-            return await message.edit_text("<b>Only video and gif supported!</b>")
+        return await message.edit_text("<b>Only video and gif supported!</b>")
 
     chat = await client.get_chat(message.chat.id, force_full=True)
 
     if not chat.can_send_voice_messages:
-        if not message.empty:
-            return await message.edit_text(
-                "<b>Voice messages are forbidden in this chat.</b>"
-            )
+        return await message.edit_text(
+            "<b>Voice messages are forbidden in this chat.</b>"
+        )
+
+    if message.media:
+        message.empty = bool(await message.delete())
 
     if not message.empty:
         await message.edit_text("<code>Converting video...</code>")
@@ -84,7 +78,10 @@ async def vnote(client: Client, message: Message):
                 message.chat.id,
                 video_note=output_file_path,
                 reply_parameters=ReplyParameters(
-                    message_id=msg.id, chat_id=msg.chat.id
+                    message_id=msg.id,
+                    chat_id=msg.chat.id
+                    if not msg.chat.type == enums.ChatType.PRIVATE
+                    else None,
                 ),
             )
         except (errors.ReplyMessageIdInvalid, errors.ChannelInvalid):
