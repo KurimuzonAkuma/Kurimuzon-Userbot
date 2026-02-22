@@ -21,11 +21,13 @@ from utils.scripts import (
     get_ram_usage,
     shell_exec,
     time_diff,
-    with_args
+    with_args,
 )
 
 
-@Client.on_message(~filters.scheduled & command(["help", "h"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["help", "h"]) & filters.me & ~filters.forwarded
+)
 async def help_cmd(_, message: Message):
     args, _ = get_args(message)
     try:
@@ -56,7 +58,9 @@ async def help_cmd(_, message: Message):
         await message.edit(e)
 
 
-@Client.on_message(~filters.scheduled & command(["restart"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["restart"]) & filters.me & ~filters.forwarded
+)
 async def _restart(client: Client, message: Message):
     db.set(
         "core.updater",
@@ -66,14 +70,16 @@ async def _restart(client: Client, message: Message):
             "message_id": message.id,
             "time": perf_counter(),
             "type": "restart",
-        }
+        },
     )
 
     await message.edit("<code>Restarting...</code>")
     os.execvp(sys.executable, [sys.executable, *sys.argv])
 
 
-@Client.on_message(~filters.scheduled & command(["update"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["update"]) & filters.me & ~filters.forwarded
+)
 async def _update(client: Client, message: Message):
     await message.edit("<code>Updating...</code>")
     args, nargs = get_args(message)
@@ -114,7 +120,7 @@ async def _update(client: Client, message: Message):
             "hash": current_hash,
             "version": f"{current_version}",
             "type": "update",
-        }
+        },
     )
 
     try:
@@ -138,7 +144,10 @@ async def _update(client: Client, message: Message):
 
 
 @Client.on_message(
-    ~filters.scheduled & command(["kprefix", "prefix"]) & filters.me & ~filters.forwarded
+    ~filters.scheduled
+    & command(["kprefix", "prefix"])
+    & filters.me
+    & ~filters.forwarded
 )
 async def set_prefix(client: Client, message: Message):
     args, _ = get_args(message)
@@ -177,7 +186,9 @@ async def sendmod(client: Client, message: Message):
         await message.reply(format_exc(e))
 
 
-@Client.on_message(~filters.scheduled & command(["status"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["status"]) & filters.me & ~filters.forwarded
+)
 async def _status(client: Client, message: Message):
     args, _ = get_args(message)
 
@@ -191,9 +202,7 @@ async def _status(client: Client, message: Message):
     )
     repo_link = "https://github.com/KurimuzonAkuma/Kurimuzon-Userbot"
 
-    result = (
-        f"<emoji id=5219903664428167948>🤖</emoji> <a href='{repo_link}'>Kurimuzon-Userbot</a> / "
-    )
+    result = f"<emoji id=5219903664428167948>🤖</emoji> <a href='{repo_link}'>Kurimuzon-Userbot</a> / "
     result += f"<a href='{repo_link}/commit/{current_hash}'>#{current_hash[:7]} ({current_version})</a>\n\n"
     result += f"<b>Pyrogram:</b> <code>{pyrogram.__version__}</code>\n"
     result += f"<b>Python:</b> <code>{sys.version}</code>\n"
@@ -208,8 +217,12 @@ async def _status(client: Client, message: Message):
 
     cpu_usage = get_cpu_usage()
     ram_usage = get_ram_usage()
-    kernel_version = subprocess.run(["uname", "-a"], capture_output=True).stdout.decode().strip()
-    system_uptime = subprocess.run(["uptime", "-p"], capture_output=True).stdout.decode().strip()
+    kernel_version = (
+        subprocess.run(["uname", "-a"], capture_output=True).stdout.decode().strip()
+    )
+    system_uptime = (
+        subprocess.run(["uptime", "-p"], capture_output=True).stdout.decode().strip()
+    )
 
     result += "<b>Bot status:</b>\n"
     result += f"├─<b>Uptime:</b> <code>{time_diff(uptime)}</code>\n"
@@ -229,7 +242,11 @@ async def _status(client: Client, message: Message):
     result += f"├─<b>CPU usage:</b> <code>{cpu_usage}%</code>\n"
     result += f"└─<b>RAM usage:</b> <code>{ram_usage}MB</code>\n\n"
 
-    known_peers, known_usernames = await (await client.storage.conn.execute("SELECT (SELECT COUNT(id) FROM peers) AS peer_count, (SELECT COUNT(username) FROM usernames) AS username_count")).fetchone()
+    known_peers, known_usernames = await (
+        await client.storage.conn.execute(
+            "SELECT (SELECT COUNT(id) FROM peers) AS peer_count, (SELECT COUNT(username) FROM usernames) AS username_count"
+        )
+    ).fetchone()
     session_size = Path(f"{client.name}.session").stat().st_size
 
     result += "<b>Session info:</b>\n"
@@ -237,21 +254,25 @@ async def _status(client: Client, message: Message):
     result += f"├─<b>Known usernames:</b> <code>{known_usernames:,}</code>\n"
     result += f"└─<b>Session size:</b> <code>{format_bytes(session_size)}</code>"
 
-    await message.edit(result, link_preview_options=LinkPreviewOptions(is_disabled=True))
+    await message.edit(
+        result, link_preview_options=LinkPreviewOptions(is_disabled=True)
+    )
 
 
-@Client.on_message(~filters.scheduled & command(["ping", "p"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["ping", "p"]) & filters.me & ~filters.forwarded
+)
 async def ping(client: Client, message: Message):
     start = perf_counter()
-    await client.invoke(
-        raw.functions.Ping(ping_id=0)
-    )
+    await client.invoke(raw.functions.Ping(ping_id=0))
     end = perf_counter()
     await message.edit(f"<b>Pong! {int((end - start) * 1000)}ms</b>")
 
 
 module = modules_help.add_module("base", __file__)
-module.add_command("help", "Get common/module/command help.", "[module/command name]", ["h"])
+module.add_command(
+    "help", "Get common/module/command help.", "[module/command name]", ["h"]
+)
 module.add_command("prefix", "Set custom prefix", None, ["kprefix"])
 module.add_command("restart", "Useful when you want to reload a bot")
 module.add_command("update", "Update the userbot from the repository")

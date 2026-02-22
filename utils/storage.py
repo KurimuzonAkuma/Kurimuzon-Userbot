@@ -1,5 +1,4 @@
 import base64
-import json
 import logging
 import struct
 import time
@@ -182,7 +181,9 @@ class EncryptedStorage(Storage):
             await self.conn.execute("ALTER TABLE sessions ADD server_address TEXT;")
             await self.conn.execute("ALTER TABLE sessions ADD port INTEGER;")
 
-            await self.conn.execute("UPDATE sessions SET server_address = ?;", (address,))
+            await self.conn.execute(
+                "UPDATE sessions SET server_address = ?;", (address,)
+            )
             await self.conn.execute("UPDATE sessions SET port = 443;")
 
             version += 1
@@ -205,7 +206,9 @@ class EncryptedStorage(Storage):
 
     async def open(self):
         if self.in_memory:
-            self.conn = await aiosqlite.connect(":memory:", timeout=1, check_same_thread=False)
+            self.conn = await aiosqlite.connect(
+                ":memory:", timeout=1, check_same_thread=False
+            )
             await self.create()
 
             if self.session_string:
@@ -259,7 +262,9 @@ class EncryptedStorage(Storage):
         path = self.database
         file_exists = isinstance(path, Path) and path.is_file()
 
-        self.conn = await aiosqlite.connect(str(path), timeout=1, check_same_thread=False)
+        self.conn = await aiosqlite.connect(
+            str(path), timeout=1, check_same_thread=False
+        )
 
         if self.use_wal:
             await self.conn.execute("PRAGMA journal_mode=WAL")
@@ -289,7 +294,8 @@ class EncryptedStorage(Storage):
 
     async def update_peers(self, peers: List[Tuple[int, int, str, str]]):
         await self.conn.executemany(
-            "REPLACE INTO peers (id, access_hash, type, phone_number) VALUES (?, ?, ?, ?)", peers
+            "REPLACE INTO peers (id, access_hash, type, phone_number) VALUES (?, ?, ?, ?)",
+            peers,
         )
 
         await self.conn.commit()
@@ -315,7 +321,9 @@ class EncryptedStorage(Storage):
             return await r.fetchall()
         else:
             if isinstance(value, int):
-                await self.conn.execute("DELETE FROM update_state WHERE id = ?", (value,))
+                await self.conn.execute(
+                    "DELETE FROM update_state WHERE id = ?", (value,)
+                )
             else:
                 await self.conn.execute(
                     "REPLACE INTO update_state (id, pts, qts, date, seq) VALUES (?, ?, ?, ?, ?)",
@@ -356,7 +364,8 @@ class EncryptedStorage(Storage):
     async def get_peer_by_phone_number(self, phone_number: str):
         r = await (
             await self.conn.execute(
-                "SELECT id, access_hash, type FROM peers WHERE phone_number = ?", (phone_number,)
+                "SELECT id, access_hash, type FROM peers WHERE phone_number = ?",
+                (phone_number,),
             )
         ).fetchone()
 
@@ -401,7 +410,11 @@ class EncryptedStorage(Storage):
             r = await self._accessor("sessions", "auth_key", value)
             return decrypt(r, self.password) if r else None
         else:
-            return await self._accessor("sessions", "auth_key", encrypt(value, self.password) if value is not None else None)
+            return await self._accessor(
+                "sessions",
+                "auth_key",
+                encrypt(value, self.password) if value is not None else None,
+            )
 
     async def date(self, value: int = object):
         return await self._accessor("sessions", "date", value)

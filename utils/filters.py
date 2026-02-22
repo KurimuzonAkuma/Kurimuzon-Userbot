@@ -74,7 +74,9 @@ def command(commands: Union[str, List[str]], case_sensitive: bool = False):
     commands = commands if isinstance(commands, list) else [commands]
     commands = {c if case_sensitive else c.lower() for c in commands}
 
-    return create(func, "CommandFilter", commands=commands, case_sensitive=case_sensitive)
+    return create(
+        func, "CommandFilter", commands=commands, case_sensitive=case_sensitive
+    )
 
 
 class startswith(Filter, set):
@@ -112,7 +114,9 @@ class viabot(Filter, set):
     def __init__(self, bots: Union[int, str, List[Union[int, str]]] = None):
         bots = [] if bots is None else bots if isinstance(bots, list) else [bots]
 
-        super().__init__(bot.lower().strip("@") if isinstance(bot, str) else bot for bot in bots)
+        super().__init__(
+            bot.lower().strip("@") if isinstance(bot, str) else bot for bot in bots
+        )
 
     async def __call__(self, _, message: Message):
         return message.via_bot and (
@@ -139,7 +143,9 @@ def ttl_media_filter(_, __, message: Message) -> bool:
     if not message.media:
         return False
 
-    return bool(getattr(getattr(message, message.media.value, None), "ttl_seconds", None))
+    return bool(
+        getattr(getattr(message, message.media.value, None), "ttl_seconds", None)
+    )
 
 
 ttl_media = create(ttl_media_filter)

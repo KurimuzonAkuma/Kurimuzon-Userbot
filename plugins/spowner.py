@@ -77,7 +77,9 @@ async def sticker_pack_owner(client: Client, message: Message):
             f"<b>Sticker set owner id:</b> <code>{owner_id}</code>\n<b>Username:</b> {username}"
         )
 
-    return await message.edit_text(f"<b>Sticker set owner id:</b> <code>{owner_id}</code>")
+    return await message.edit_text(
+        f"<b>Sticker set owner id:</b> <code>{owner_id}</code>"
+    )
 
 
 module = modules_help.add_module("spowner", __file__)

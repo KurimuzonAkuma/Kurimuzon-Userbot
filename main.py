@@ -4,13 +4,18 @@ import logging
 import os
 import pathlib
 import platform
-
+from pyrogram.connection.transport import TCPIntermediate
 import git
 from pyrogram import enums, idle, raw
 
 from utils.client import CustomClient
 from utils.misc import env, scheduler, scheduler_jobs
-from utils.scripts import Formatter, get_proxy, handle_restart, get_init_connection_params
+from utils.scripts import (
+    Formatter,
+    get_proxy,
+    handle_restart,
+    get_init_connection_params,
+)
 from utils.storage import EncryptedStorage
 
 os.chdir(pathlib.Path(__file__).parent)
@@ -18,7 +23,9 @@ os.chdir(pathlib.Path(__file__).parent)
 
 async def main():
     stdout_handler = logging.StreamHandler()
-    stdout_handler.setFormatter(Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    stdout_handler.setFormatter(
+        Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
 
     logging.basicConfig(
         level=logging.INFO,
@@ -43,14 +50,13 @@ async def main():
         parse_mode=enums.ParseMode.HTML,
         skip_updates=False,
         proxy=get_proxy(),
-        init_connection_params=get_init_connection_params()
+        protocol_factory=TCPIntermediate,
+        init_connection_params=get_init_connection_params(),
     )
 
     # For security purposes
     app.storage = EncryptedStorage(
-        client=app,
-        password=bytes(env.str("ENCRYPTION_KEY"), "utf-8"),
-        use_wal=True
+        client=app, password=bytes(env.str("ENCRYPTION_KEY"), "utf-8"), use_wal=True
     )
 
     delattr(raw.functions.account, "DeleteAccount")

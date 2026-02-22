@@ -1,10 +1,9 @@
-aiohttp
 aiosqlite
 apscheduler
 environs
 GitPython
-kurigram
+httpx
+kurigram[fast]
 psutil
-tgcrypto
-qrcode
 pycryptodome
+qrcode

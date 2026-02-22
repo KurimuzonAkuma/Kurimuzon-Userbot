@@ -21,7 +21,11 @@ async def vnote(_: Client, message: Message):
     if message.media:
         message.empty = bool(await message.delete())
 
-    if not message.media and message.reply_to_message and message.reply_to_message.media:
+    if (
+        not message.media
+        and message.reply_to_message
+        and message.reply_to_message.media
+    ):
         msg = message.reply_to_message
     else:
         msg = message
@@ -65,15 +69,13 @@ async def vnote(_: Client, message: Message):
         )
 
         try:
-            await msg.reply_video_note(
-                video_note=output_file_path
-            )
+            await msg.reply_video_note(video_note=output_file_path)
         except errors.VoiceMessagesForbidden:
             if not message.empty:
-                return await message.edit("<b>Voice messages forbidden in this chat.</b>")
+                return await message.edit(
+                    "<b>Voice messages forbidden in this chat.</b>"
+                )
 
 
 module = modules_help.add_module("vnote", __file__)
-module.add_command(
-    "vnote", "Make video note from message or reply media", "[reply]"
-)
+module.add_command("vnote", "Make video note from message or reply media", "[reply]")

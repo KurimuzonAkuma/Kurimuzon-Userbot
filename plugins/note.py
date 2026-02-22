@@ -5,7 +5,6 @@ from sqlite3 import OperationalError
 from pyrogram import Client, enums, filters, types
 from pyrogram.types import Message
 from utils.db import db
-from functools import partial
 from utils.filters import command
 from utils.misc import modules_help
 from utils.scripts import get_prefix
@@ -35,7 +34,9 @@ def get_media_file_name(obj) -> str:
     return "document"
 
 
-@Client.on_message(~filters.scheduled & command(["snote"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["snote"]) & filters.me & ~filters.forwarded
+)
 async def snote_handler(client: Client, message: Message):
     args = message.text.split(maxsplit=1)
 
@@ -97,7 +98,9 @@ async def snote_handler(client: Client, message: Message):
     await message.edit(f"<b>Successfully saved note:</b> <code>{note_name}</code>")
 
 
-@Client.on_message(~filters.scheduled & command(["note"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["note"]) & filters.me & ~filters.forwarded
+)
 async def note_handler(client: Client, message: Message):
     args = message.text.split(maxsplit=1)
 
@@ -128,13 +131,21 @@ async def note_handler(client: Client, message: Message):
             content_bytes.name = media["file_name"]
 
             if content_type == enums.MessageMediaType.PHOTO:
-                input_media_group.append(types.InputMediaPhoto(content_bytes, media["caption"]))
+                input_media_group.append(
+                    types.InputMediaPhoto(content_bytes, media["caption"])
+                )
             elif content_type == enums.MessageMediaType.VIDEO:
-                input_media_group.append(types.InputMediaVideo(content_bytes, media["caption"]))
+                input_media_group.append(
+                    types.InputMediaVideo(content_bytes, media["caption"])
+                )
             elif content_type == enums.MessageMediaType.DOCUMENT:
-                input_media_group.append(types.InputMediaDocument(content_bytes, media["caption"]))
+                input_media_group.append(
+                    types.InputMediaDocument(content_bytes, media["caption"])
+                )
             elif content_type == enums.MessageMediaType.AUDIO:
-                input_media_group.append(types.InputMediaAudio(content_bytes, media["caption"]))
+                input_media_group.append(
+                    types.InputMediaAudio(content_bytes, media["caption"])
+                )
 
             return await message.reply_media_group(
                 media=input_media_group,
@@ -147,9 +158,13 @@ async def note_handler(client: Client, message: Message):
         content_bytes.name = media["file_name"]
 
         if content_type == enums.MessageMediaType.STICKER:
-            return await message.reply_sticker(content_bytes, reply_parameters=reply_params)
+            return await message.reply_sticker(
+                content_bytes, reply_parameters=reply_params
+            )
         elif content_type == enums.MessageMediaType.VIDEO_NOTE:
-            return await message.reply_video_note(content_bytes, reply_parameters=reply_params)
+            return await message.reply_video_note(
+                content_bytes, reply_parameters=reply_params
+            )
         elif content_type == enums.MessageMediaType.VOICE:
             return await message.reply_voice(
                 content_bytes, caption=media["caption"], reply_parameters=reply_params
@@ -184,7 +199,9 @@ async def note_handler(client: Client, message: Message):
     )
 
 
-@Client.on_message(~filters.scheduled & command(["dnote"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["dnote"]) & filters.me & ~filters.forwarded
+)
 async def dnote_handler(client: Client, message: Message):
     args = message.text.split(maxsplit=1)
 
@@ -199,12 +216,16 @@ async def dnote_handler(client: Client, message: Message):
 
     if note:
         db.remove("core.notes", f"note_{note_name}")
-        await message.edit(f"<b>Successfully deleted note:</b> <code>{note_name}</code>")
+        await message.edit(
+            f"<b>Successfully deleted note:</b> <code>{note_name}</code>"
+        )
     else:
         await message.edit(f"<b>No note with name:</b> <code>{note_name}</code>")
 
 
-@Client.on_message(~filters.scheduled & command(["notes"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["notes"]) & filters.me & ~filters.forwarded
+)
 async def notes_handler(_, message: Message):
     with db._lock:
         try:

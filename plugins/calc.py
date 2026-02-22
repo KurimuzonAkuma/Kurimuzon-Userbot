@@ -18,4 +18,6 @@ async def calc(_, message: Message):
 
 
 module = modules_help.add_module("calculator", __file__)
-module.add_command("calc", "Evaluate expression and return result", "[expression]*", ["c"])
+module.add_command(
+    "calc", "Evaluate expression and return result", "[expression]*", ["c"]
+)

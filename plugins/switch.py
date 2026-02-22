@@ -4,8 +4,12 @@ from pyrogram.types import Message
 from utils.filters import command
 from utils.misc import modules_help
 
-ru_keys = """ёйцукенгшщзхъфывапролджэячсмитьбю.Ё"№;%:?ЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭ/ЯЧСМИТЬБЮ,"""
-en_keys = """`qwertyuiop[]asdfghjkl;'zxcvbnm,./~@#$%^&QWERTYUIOP{}ASDFGHJKL:"|ZXCVBNM<>?"""
+ru_keys = (
+    """ёйцукенгшщзхъфывапролджэячсмитьбю.Ё"№;%:?ЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭ/ЯЧСМИТЬБЮ,"""
+)
+en_keys = (
+    """`qwertyuiop[]asdfghjkl;'zxcvbnm,./~@#$%^&QWERTYUIOP{}ASDFGHJKL:"|ZXCVBNM<>?"""
+)
 table = str.maketrans(ru_keys + en_keys, en_keys + ru_keys)
 
 
@@ -26,4 +30,6 @@ async def switch(client: Client, message: Message):
 
 
 module = modules_help.add_module("switch", __file__)
-module.add_command("switch", "Switch keyboard layout", "[reply/text for switch]*", ["sw"])
+module.add_command(
+    "switch", "Switch keyboard layout", "[reply/text for switch]*", ["sw"]
+)

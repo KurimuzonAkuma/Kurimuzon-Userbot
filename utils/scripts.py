@@ -14,8 +14,8 @@ import traceback
 from time import perf_counter
 from typing import Dict, List, Optional, Tuple, Union
 
-import aiohttp
 import git
+import httpx
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from Crypto.Cipher import AES
@@ -62,34 +62,23 @@ class Formatter(logging.Formatter):
 def get_proxy(proxies_path: str = "proxies.txt") -> dict:
     try:
         with open(proxies_path, "r") as f:
-            proxies = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+            proxies = [
+                line.strip() for line in f if line.strip() and not line.startswith("#")
+            ]
     except FileNotFoundError:
         return None
 
     if not proxies:
         return None
 
-    random_proxy = random.choice(
+    return random.choice(
         [line.strip() for line in proxies if line.strip() and not line.startswith("#")]
     )
 
-    if not random_proxy:
-        return None
 
-    protocol, proxy = random_proxy.split()
-    proxy = proxy.split("@")
-
-    if len(proxy) == 2:
-        username, password = proxy[0].split(":")
-
-        proxy = dict(scheme=protocol, server=proxy[1], username=username, password=password)
-    else:
-        proxy = dict(scheme=protocol, server=proxy[0])
-
-    return proxy
-
-
-def get_init_connection_params(params_path: str = "init_connection_params.json") -> dict:
+def get_init_connection_params(
+    params_path: str = "init_connection_params.json",
+) -> dict:
     try:
         with open(params_path, "r") as f:
             return json.load(f)
@@ -145,15 +134,19 @@ def generate_random_string(length):
     return "".join(random.choice(characters) for _ in range(length))
 
 
-async def paste_yaso(code: str, expiration_time: int = 10080):
+async def paste_yaso(code: str, expiration_time: int = 10080) -> str:
     try:
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
-            async with session.post(
-                "https://api.yaso.su/v1/auth/guest",
-            ) as auth:
-                auth.raise_for_status()
+        async with httpx.AsyncClient(
+            timeout=10,
+            verify=False,
+            headers={
+                "User-Agent": "Kurimuzon-Userbot (Dubzer krutoy)",
+            },
+        ) as client:
+            response = await client.post("https://api.yaso.su/v1/auth/guest")
+            response.raise_for_status()
 
-            async with session.post(
+            response = await client.post(
                 "https://api.yaso.su/v1/records",
                 json={
                     "captcha": generate_random_string(569),
@@ -161,13 +154,13 @@ async def paste_yaso(code: str, expiration_time: int = 10080):
                     "content": code,
                     "expirationTime": expiration_time,
                 },
-            ) as paste:
-                paste.raise_for_status()
-                result = await paste.json()
+            )
+            response.raise_for_status()
+            result = response.json()
     except Exception:
         return "Pasting failed"
-    else:
-        return f"https://yaso.su/{result['url']}"
+
+    return f"https://yaso.su/{result['url']}"
 
 
 def get_prefix():
@@ -242,7 +235,9 @@ class ScheduleJob:
     def __init__(
         self,
         func: callable,
-        trigger: Optional[Union[CronTrigger, IntervalTrigger]] = IntervalTrigger(seconds=3600),
+        trigger: Optional[Union[CronTrigger, IntervalTrigger]] = IntervalTrigger(
+            seconds=3600
+        ),
         *args,
         **kwargs,
     ):
@@ -432,13 +427,9 @@ class ModuleHelp:
         help_text = f"<b>Help for command</b> <code>{prefix}{command.name}</code>\n"
         if command.aliases:
             help_text += "<b>Aliases:</b> "
-            help_text += (
-                f"{' '.join([f'<code>{prefix}{alias}</code>' for alias in command.aliases])}\n"
-            )
+            help_text += f"{' '.join([f'<code>{prefix}{alias}</code>' for alias in command.aliases])}\n"
 
-        help_text += (
-            f"\n<b>Module: {module.name}</b> (<code>{prefix}help {module.name}</code>)\n\n"
-        )
+        help_text += f"\n<b>Module: {module.name}</b> (<code>{prefix}help {module.name}</code>)\n\n"
         help_text += f"<code>{prefix}{command.name}"
 
         if command.args:
@@ -475,14 +466,18 @@ async def shell_exec(
             executable=executable,
             stdout=stdout,
             stderr=stderr,
-            cwd=cwd
+            cwd=cwd,
         )
         try:
             out, err = process.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             process.kill()
             raise
-        return process.returncode, out.decode(errors="replace"), err.decode(errors="replace")
+        return (
+            process.returncode,
+            out.decode(errors="replace"),
+            err.decode(errors="replace"),
+        )
 
     return await asyncio.to_thread(run_command)
 
@@ -705,7 +700,9 @@ def encrypt(data: bytes, password: str) -> bytes:
     salt = get_random_bytes(16)
     iv = get_random_bytes(16)
 
-    aes_cipher = AES.new(PBKDF2(password, salt, dkLen=32, count=100_000), AES.MODE_CBC, iv)
+    aes_cipher = AES.new(
+        PBKDF2(password, salt, dkLen=32, count=100_000), AES.MODE_CBC, iv
+    )
 
     pad_len = 16 - len(plaintext) % 16
     padded = plaintext + bytes([pad_len]) * pad_len
@@ -721,7 +718,9 @@ def decrypt(data: bytes, password: str) -> bytes:
     iv = data[16:32]
     ciphertext = data[32:]
 
-    aes_cipher = AES.new(PBKDF2(password, salt, dkLen=32, count=100_000), AES.MODE_CBC, iv)
+    aes_cipher = AES.new(
+        PBKDF2(password, salt, dkLen=32, count=100_000), AES.MODE_CBC, iv
+    )
     decrypted = aes_cipher.decrypt(ciphertext)
 
     pad_len = decrypted[-1]

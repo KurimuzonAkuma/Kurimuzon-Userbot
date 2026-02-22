@@ -8,13 +8,17 @@ from utils.misc import modules_help
 from utils.scripts import get_args_raw, with_reply
 
 
-@Client.on_message(~filters.scheduled & command(["d", "del"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["d", "del"]) & filters.me & ~filters.forwarded
+)
 async def del_msg(_, message: Message):
     await message.delete()
     await message.reply_to_message.delete()
 
 
-@Client.on_message(~filters.scheduled & command("purge") & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command("purge") & filters.me & ~filters.forwarded
+)
 @with_reply
 async def purge(client: Client, message: Message):
     message_ids = []
@@ -40,7 +44,11 @@ async def purge(client: Client, message: Message):
 
 @Client.on_message(command(["tagall"]) & filters.me)
 async def tagall_handler(client: Client, message: Message):
-    if message.chat.type not in (enums.ChatType.FORUM, enums.ChatType.SUPERGROUP, enums.ChatType.GROUP):
+    if message.chat.type not in (
+        enums.ChatType.FORUM,
+        enums.ChatType.SUPERGROUP,
+        enums.ChatType.GROUP,
+    ):
         return await message.edit("Command is only available in groups and supergroups")
 
     await message.delete()
@@ -55,7 +63,9 @@ async def tagall_handler(client: Client, message: Message):
     for i in range(0, len(tags), 5):
         await message.reply(
             args + "".join(tags[i : i + 5]),
-            reply_parameters=types.ReplyParameters(message_id=message.reply_to_message_id),
+            reply_parameters=types.ReplyParameters(
+                message_id=message.reply_to_message_id
+            ),
         )
         await asyncio.sleep(0.1)
 

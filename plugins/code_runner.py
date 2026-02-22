@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import html
 import logging
 import random
@@ -24,17 +23,18 @@ from utils.scripts import format_bytes, format_time, paste_yaso, shell_exec
 
 log = logging.getLogger(__name__)
 
+
 async def progress(
     current: int,
     total: int,
     message: Optional["Message"] = None,
     update_interval: float = 1,
     width: int = 30,
-    start_time: Optional[float] = None
+    start_time: Optional[float] = None,
 ) -> str:
     percentage = min((current / total) * 100, 100)
     filled = int((current / total) * width)
-    bar = '█' * filled + '░' * (width - filled)
+    bar = "█" * filled + "░" * (width - filled)
 
     is_download_done = total == 0 or current == total
 
@@ -64,7 +64,9 @@ async def progress(
     else:
         result += "]"
 
-    if not is_download_done and (start_time is not None and not elapsed_time % update_interval < 0.1):
+    if not is_download_done and (
+        start_time is not None and not elapsed_time % update_interval < 0.1
+    ):
         return None
 
     log.info(result)
@@ -74,6 +76,7 @@ async def progress(
             await message.edit(result)
         except Exception as e:
             log.error(e)
+
 
 async def aexec(code, client: Client, message: Message, timeout=None):
     exec_globals = {
@@ -94,7 +97,7 @@ async def aexec(code, client: Client, message: Message, timeout=None):
         "utils": pyroutils,
         "pyrogram": pyrogram,
         "progress": progress,
-        "asyncio": asyncio
+        "asyncio": asyncio,
     }
 
     exec(
@@ -125,7 +128,10 @@ def extract_code_from_reply(message: Message, language: str = None) -> Optional[
 
     if language and message.reply_to_message.entities:
         for entity in message.reply_to_message.entities:
-            if entity.type == enums.MessageEntityType.PRE and entity.language == language:
+            if (
+                entity.type == enums.MessageEntityType.PRE
+                and entity.language == language
+            ):
                 return message.reply_to_message.content[
                     entity.offset : entity.offset + entity.length
                 ]
@@ -133,7 +139,9 @@ def extract_code_from_reply(message: Message, language: str = None) -> Optional[
     return message.reply_to_message.content
 
 
-@Client.on_message(~filters.scheduled & command(["py", "rpy"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["py", "rpy"]) & filters.me & ~filters.forwarded
+)
 async def python_exec(client: Client, message: Message):
     code = ""
 
@@ -148,11 +156,15 @@ async def python_exec(client: Client, message: Message):
 
     code = code.replace("\u00a0", "")
 
-    await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
+    await message.edit_text(
+        "<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>"
+    )
 
     try:
         start_time = perf_counter()
-        result = await aexec(code, client, message, timeout=db.get("shell", "timeout", 60))
+        result = await aexec(
+            code, client, message, timeout=db.get("shell", "timeout", 60)
+        )
         elapsed = round(perf_counter() - start_time, 5)
     except asyncio.TimeoutError:
         return await message.edit_text(
@@ -237,7 +249,9 @@ async def python_exec(client: Client, message: Message):
         )
 
 
-@Client.on_message(~filters.scheduled & command(["gcc", "rgcc"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["gcc", "rgcc"]) & filters.me & ~filters.forwarded
+)
 async def gcc_exec(_: Client, message: Message):
     if len(message.command) == 1 and message.command[0] != "rgcc":
         return await message.edit_text("<b>Code to execute isn't provided</b>")
@@ -247,7 +261,9 @@ async def gcc_exec(_: Client, message: Message):
     else:
         code = message.text.split(maxsplit=1)[1]
 
-    await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
+    await message.edit_text(
+        "<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>"
+    )
 
     with tempfile.TemporaryDirectory() as tempdir:
         with tempfile.NamedTemporaryFile("w+", suffix=".c", dir=tempdir) as file:
@@ -323,7 +339,9 @@ async def gcc_exec(_: Client, message: Message):
                 )
 
 
-@Client.on_message(~filters.scheduled & command(["gpp", "rgpp"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["gpp", "rgpp"]) & filters.me & ~filters.forwarded
+)
 async def gpp_exec(_: Client, message: Message):
     if len(message.command) == 1 and message.command[0] != "rgpp":
         return await message.edit_text("<b>Code to execute isn't provided</b>")
@@ -333,7 +351,9 @@ async def gpp_exec(_: Client, message: Message):
     else:
         code = message.text.split(maxsplit=1)[1]
 
-    await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
+    await message.edit_text(
+        "<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>"
+    )
 
     with tempfile.TemporaryDirectory() as tempdir:
         with tempfile.NamedTemporaryFile("w+", suffix=".cpp", dir=tempdir) as file:
@@ -407,7 +427,9 @@ async def gpp_exec(_: Client, message: Message):
                 )
 
 
-@Client.on_message(~filters.scheduled & command(["lua", "rlua"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["lua", "rlua"]) & filters.me & ~filters.forwarded
+)
 async def lua_exec(_: Client, message: Message):
     if len(message.command) == 1 and message.command[0] != "rlua":
         return await message.edit_text("<b>Code to execute isn't provided</b>")
@@ -417,7 +439,9 @@ async def lua_exec(_: Client, message: Message):
     else:
         code = message.text.split(maxsplit=1)[1]
 
-    await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
+    await message.edit_text(
+        "<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>"
+    )
 
     with tempfile.TemporaryDirectory() as tempdir:
         with tempfile.NamedTemporaryFile("w+", suffix=".lua", dir=tempdir) as file:
@@ -471,7 +495,9 @@ async def lua_exec(_: Client, message: Message):
                 )
 
 
-@Client.on_message(~filters.scheduled & command(["go", "rgo"]) & filters.me & ~filters.forwarded)
+@Client.on_message(
+    ~filters.scheduled & command(["go", "rgo"]) & filters.me & ~filters.forwarded
+)
 async def go_exec(_: Client, message: Message):
     if len(message.command) == 1 and message.command[0] != "rgo":
         return await message.edit_text("<b>Code to execute isn't provided</b>")
@@ -481,7 +507,9 @@ async def go_exec(_: Client, message: Message):
     else:
         code = message.text.split(maxsplit=1)[1]
 
-    await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
+    await message.edit_text(
+        "<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>"
+    )
 
     with tempfile.TemporaryDirectory() as tempdir:
         with tempfile.NamedTemporaryFile("w+", suffix=".go", dir=tempdir) as file:
@@ -547,7 +575,9 @@ async def node_exec(_: Client, message: Message):
     else:
         code = message.text.split(maxsplit=1)[1]
 
-    await message.edit_text("<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>")
+    await message.edit_text(
+        "<b><emoji id=5821116867309210830>🔃</emoji> Executing...</b>"
+    )
 
     with tempfile.TemporaryDirectory() as tempdir:
         with tempfile.NamedTemporaryFile("w+", suffix=".js", dir=tempdir) as file:
