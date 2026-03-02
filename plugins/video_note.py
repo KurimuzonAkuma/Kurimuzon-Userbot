@@ -132,6 +132,7 @@ async def sticker_cmd(client: Client, message: Message):
             # video sticker
             cmd = (
                 f'ffmpeg -y -i "{input_file_path}" -t 3 -an -c:v libvpx-vp9 -pix_fmt yuva420p '
+                "-row-mt 1 -deadline realtime -cpu-used 8 "
                 '-vf "fps=30,scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=black@0" '
                 f'-b:v 500k "{output_file_path}"'
             )
