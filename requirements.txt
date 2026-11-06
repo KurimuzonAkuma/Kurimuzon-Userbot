@@ -5,5 +5,5 @@ GitPython
 httpx
 kurigram[fast]
 psutil
-pycryptodome
+pycryptodomex
 qrcode

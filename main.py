@@ -3,35 +3,37 @@ import contextlib
 import logging
 import os
 import pathlib
-import platform
-from pyrogram.connection.transport import TCPIntermediate
+
 import git
 from pyrogram import enums, idle, raw
+from pyrogram.connection.transport import TCPIntermediatePadded
 
 from utils.client import CustomClient
-from utils.misc import env, scheduler, scheduler_jobs
+from utils.loader import scheduler
+from utils.misc import env
 from utils.scripts import (
     Formatter,
+    get_init_connection_params,
     get_proxy,
     handle_restart,
-    get_init_connection_params,
 )
 from utils.storage import EncryptedStorage
+
+log = logging.getLogger(__name__)
 
 os.chdir(pathlib.Path(__file__).parent)
 
 
 async def main():
     stdout_handler = logging.StreamHandler()
-    stdout_handler.setFormatter(
-        Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    )
+    stdout_handler.setFormatter(Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[stdout_handler],
     )
+    logging.getLogger("apscheduler.executors").setLevel(logging.WARNING)
 
     app = CustomClient(
         "KurimuzonUserbot",
@@ -44,24 +46,24 @@ async def main():
         lang_code=env.str("LANG_CODE", None) or "jabka",
         client_platform=enums.ClientPlatform.ANDROID,
         hide_password=True,
-        plugins=dict(root="plugins"),
+        plugins={"root": "plugins"},
         sleep_threshold=10,
         workdir=pathlib.Path(__file__).parent,
         parse_mode=enums.ParseMode.HTML,
-        skip_updates=False,
+        skip_updates=True,
         proxy=get_proxy(),
-        protocol_factory=TCPIntermediate,
+        protocol_factory=TCPIntermediatePadded,
         init_connection_params=get_init_connection_params(),
     )
 
     # For security purposes
-    app.storage = EncryptedStorage(
-        client=app, password=bytes(env.str("ENCRYPTION_KEY"), "utf-8"), use_wal=True
-    )
+    app.storage = EncryptedStorage(client=app, password=env.str("ENCRYPTION_KEY"), use_wal=True)
 
     delattr(raw.functions.account, "DeleteAccount")
 
-    await app.start(use_qr=False)
+    await app.start(use_qr=True)
+
+    await app.set_dc()
 
     async for _ in app.get_dialogs(limit=100):
         pass
@@ -72,9 +74,7 @@ async def main():
         git.Repo()
     except git.exc.InvalidGitRepositoryError:
         repo = git.Repo.init()
-        origin = repo.create_remote(
-            "origin", "https://github.com/KurimuzonAkuma/Kurimuzon-Userbot"
-        )
+        origin = repo.create_remote("origin", "https://github.com/KurimuzonAkuma/Kurimuzon-Userbot")
         origin.fetch()
         repo.create_head("master", origin.refs.master)
         repo.heads.master.set_tracking_branch(origin.refs.master)
@@ -82,16 +82,19 @@ async def main():
 
     await handle_restart(app)
 
-    for job in scheduler_jobs:
-        scheduler.add_job(
-            func=job.func,
-            trigger=job.trigger,
-            args=[app] + job.args,
-            kwargs=job.kwargs,
-            id=job.id,
-        )
+    app.register_plugin_loops()
 
     scheduler.start()
+
+    # Preload media sessions
+    # for dc_id in [1, 2, 4, 5]:
+    #     await app.get_session(dc_id=dc_id, is_media=True)
+
+    log.info(
+        f"{app.me.username}#{app.me.id} on {git.Repo().active_branch.name}"
+        f"@{git.Repo().head.commit.hexsha[:7]}"
+        " | Userbot succesfully started."
+    )
 
     await idle()
 
@@ -100,20 +103,11 @@ async def main():
 
 if __name__ == "__main__":
     with contextlib.suppress(KeyboardInterrupt, SystemExit):
-        if platform.system() == "Windows":
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        else:
-            try:
-                import uvloop
+        try:
+            import uvloop
 
-                uvloop.install()
-            except ImportError:
-                logging.warning("uvloop not installed.")
+            uvloop.install()
+        except ImportError:
+            log.warning("uvloop not installed.")
 
-        if platform.python_version_tuple() >= ("3", "11"):
-            with asyncio.Runner() as runner:
-                loop = runner.get_loop()
-                loop.run_until_complete(main())
-        else:
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(main())
+        asyncio.run(main())

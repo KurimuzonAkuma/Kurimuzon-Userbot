@@ -10,22 +10,20 @@ import shlex
 import string
 import subprocess
 import time
-import traceback
 from time import perf_counter
-from typing import Dict, List, Optional, Tuple, Union
 
+from Cryptodome.Cipher import AES
+from Cryptodome.Hash import SHA256
+from Cryptodome.Protocol.KDF import PBKDF2
+from Cryptodome.Random import get_random_bytes
 import git
 import httpx
-from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
-from Crypto.Cipher import AES
-from Crypto.Hash import SHA256
-from Crypto.Protocol.KDF import PBKDF2
-from Crypto.Random import get_random_bytes
 from pyrogram import Client, errors
 from pyrogram.types import Message
 
 from utils.db import db
+
+log = logging.getLogger(__name__)
 
 
 class Formatter(logging.Formatter):
@@ -50,7 +48,7 @@ class Formatter(logging.Formatter):
 
     def format(self, record):
         log_color = self.COLORS[record.levelno]
-        fmt = "(black){asctime}(reset) (levelcolor){levelname:<8}(reset) (green){name}(reset) {message}"
+        fmt = "{asctime} (levelcolor){levelname:<8}(reset) (green){name}(reset) {message}"
         fmt = fmt.replace("(black)", self.black + self.bold)
         fmt = fmt.replace("(reset)", self.reset)
         fmt = fmt.replace("(levelcolor)", log_color)
@@ -59,12 +57,10 @@ class Formatter(logging.Formatter):
         return formatter.format(record)
 
 
-def get_proxy(proxies_path: str = "proxies.txt") -> dict:
+def get_proxy(proxies_path: str = "proxies.txt") -> str | None:
     try:
-        with open(proxies_path, "r") as f:
-            proxies = [
-                line.strip() for line in f if line.strip() and not line.startswith("#")
-            ]
+        with open(proxies_path) as f:
+            proxies = [line.strip() for line in f if line.strip() and not line.startswith("#")]
     except FileNotFoundError:
         return None
 
@@ -78,9 +74,9 @@ def get_proxy(proxies_path: str = "proxies.txt") -> dict:
 
 def get_init_connection_params(
     params_path: str = "init_connection_params.json",
-) -> dict:
+) -> dict | None:
     try:
-        with open(params_path, "r") as f:
+        with open(params_path) as f:
             return json.load(f)
     except FileNotFoundError:
         return None
@@ -134,22 +130,19 @@ def generate_random_string(length):
     return "".join(random.choice(characters) for _ in range(length))
 
 
-async def paste_yaso(code: str, expiration_time: int = 10080) -> str:
+async def paste_yaso(code: str, token: str, expiration_time: int = 10080) -> str:
     try:
         async with httpx.AsyncClient(
             timeout=10,
-            verify=False,
             headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
                 "User-Agent": "Kurimuzon-Userbot (Dubzer krutoy)",
             },
         ) as client:
-            response = await client.post("https://api.yaso.su/v1/auth/guest")
-            response.raise_for_status()
-
             response = await client.post(
-                "https://api.yaso.su/v1/records",
+                "https://api.yaso.su/pub/records",
                 json={
-                    "captcha": generate_random_string(569),
                     "codeLanguage": "auto",
                     "content": code,
                     "expirationTime": expiration_time,
@@ -157,8 +150,8 @@ async def paste_yaso(code: str, expiration_time: int = 10080) -> str:
             )
             response.raise_for_status()
             result = response.json()
-    except Exception:
-        return "Pasting failed"
+    except Exception as e:
+        return f"Pasting failed: {e}"
 
     return f"https://yaso.su/{result['url']}"
 
@@ -167,7 +160,7 @@ def get_prefix():
     return db.get("core.main", "prefix", default=".")
 
 
-def get_args_raw(message: Union[Message, str], use_reply: bool = None) -> str:
+def get_args_raw(message: Message | str, use_reply: bool | None = None) -> str:
     """Returns text after command.
 
     Args:
@@ -179,21 +172,24 @@ def get_args_raw(message: Union[Message, str], use_reply: bool = None) -> str:
         str: Text after command or empty string.
     """
     if isinstance(message, Message):
-        text = message.text or message.caption
-        args = text.split(maxsplit=1)[1] if len(text.split()) > 1 else ""
+        text = message.text or message.caption or ""
+        parts = text.split(maxsplit=1)
+        args = parts[1] if len(parts) > 1 else ""
 
-        if use_reply and not args:
-            args = message.reply_to_message.text or message.reply_to_message.caption
-
-    elif not isinstance(message, str):
+        if use_reply and not args and message.reply_to_message:
+            reply = message.reply_to_message
+            args = reply.text or reply.caption or ""
+    elif isinstance(message, str):
+        args = message
+    else:
         return ""
 
-    return args or ""
+    return args
 
 
 def get_args(
-    message: Union[Message, str], use_reply: bool = None
-) -> Tuple[List[str], Dict[str, str]]:
+    message: Message | str, use_reply: bool | None = None
+) -> tuple[list[str], dict[str, str]]:
     """Returns list of common args and a dictionary with named args.
 
     Args:
@@ -203,6 +199,7 @@ def get_args(
 
     Returns:
         List[str]: List of args.
+        Dict[str, str]: Dictionary with named args.
     """
     raw_args = get_args_raw(message, use_reply)
 
@@ -231,27 +228,10 @@ def get_args(
     return common_args, named_args
 
 
-class ScheduleJob:
-    def __init__(
-        self,
-        func: callable,
-        trigger: Optional[Union[CronTrigger, IntervalTrigger]] = IntervalTrigger(
-            seconds=3600
-        ),
-        *args,
-        **kwargs,
-    ):
-        self.func = func
-        self.args = args or []
-        self.kwargs = kwargs or {}
-        self.id = func.__name__
-        self.trigger = trigger
-
-
 def get_ram_usage() -> float:
     """Returns current process tree memory usage in MB"""
     try:
-        import psutil
+        import psutil  # noqa: PLC0415
 
         current_process = psutil.Process(os.getpid())
         mem = current_process.memory_info()[0] / 2.0**20
@@ -266,7 +246,7 @@ def get_ram_usage() -> float:
 def get_cpu_usage() -> float:
     """Returns current process tree CPU usage in %"""
     try:
-        import psutil
+        import psutil  # noqa: PLC0415
 
         current_process = psutil.Process(os.getpid())
         cpu = current_process.cpu_percent()
@@ -278,185 +258,14 @@ def get_cpu_usage() -> float:
         return 0
 
 
-class Command:
-    def __init__(
-        self,
-        name: str,
-        description: Optional[str] = None,
-        args: Optional[str] = None,
-        aliases: Optional[List[str]] = None,
-    ):
-        self.name = name
-        self.description = description
-        self.args = args
-        self.aliases = aliases
-        self.hidden = False
-
-
-class Module:
-    def __init__(self, name: str, path: str):
-        self.name = name
-        self.path = path
-        self.commands = {}
-        self.hidden = False
-
-    def add_command(
-        self,
-        command: str,
-        description: Optional[str] = None,
-        args: Optional[str] = None,
-        aliases: Optional[List[str]] = None,
-    ) -> Command:
-        if command in self.commands:
-            raise ValueError(f"Command {command} already exists")
-
-        self.commands[command] = Command(command, description, args, aliases)
-
-        return self.commands[command]
-
-    def delete_command(self, command: str) -> None:
-        if command not in self.commands:
-            raise ValueError(f"Command {command} not found")
-
-        del self.commands[command]
-
-    def hide_command(self, command: str) -> None:
-        if command not in self.commands:
-            raise ValueError(f"Command {command} not found")
-
-        self.commands[command].hidden = True
-
-    def show_command(self, command: str) -> None:
-        if command not in self.commands:
-            raise ValueError(f"Command {command} not found")
-
-        self.commands[command].hidden = False
-
-
-class ModuleHelp:
-    def __init__(self) -> None:
-        self.modules = {}
-
-    def add_module(self, name: str, path: str) -> Module:
-        self.modules[name] = Module(name, path)
-
-        return self.modules[name]
-
-    def delete_module(self, name: str) -> None:
-        del self.modules[name]
-
-    def hide_module(self, name: str) -> None:
-        if name not in self.modules:
-            raise ValueError(f"Module {name} not found")
-
-        self.modules[name].hidden = True
-
-    def show_module(self, name: str) -> None:
-        if name not in self.modules:
-            raise ValueError(f"Module {name} not found")
-
-        self.modules[name].hidden = False
-
-    def get_module(self, name: str) -> Module:
-        if name not in self.modules:
-            raise ValueError(f"Module {name} not found")
-
-        return self.modules[name]
-
-    def get_module_by_path(self, path: str) -> Module:
-        for module in self.modules.values():
-            if module.path == path:
-                return module
-
-        raise ValueError(f"Module with path {path} not found")
-
-    def help(self) -> List[str]:
-        prefix = get_prefix()
-        result = []
-
-        help_text = f"For more help on how to use a command, type <code>{prefix}help [module]</code>\n\nAvailable Modules:\n"
-
-        for module_name, module in sorted(self.modules.items(), key=lambda x: x[0]):
-            help_text += f"• {module_name.title()}: {' '.join([f'<code>{prefix + cmd_name}</code>' for cmd_name in module.commands.keys()])}\n"
-
-            if len(help_text) >= 2048:
-                result.append(help_text)
-                help_text = ""
-
-        help_text += f"\nThe number of modules in the userbot: {self.modules_count}\n"
-        help_text += f"The number of commands in the userbot: {self.commands_count}"
-
-        result.append(help_text)
-
-        return result
-
-    def module_help(self, module: str, full: bool = True) -> str:
-        if module not in self.modules:
-            raise ValueError(f"Module {module} not found")
-
-        prefix = get_prefix()
-        help_text = ""
-
-        if full:
-            help_text += f"<b>Help for |<code>{module}</code>|</b>\n\n"
-
-        help_text += "<b>Usage:</b>\n"
-        for command in self.modules[module].commands.values():
-            help_text += f"<code>{prefix}{command.name}"
-            if command.args:
-                help_text += f" {command.args}"
-            if command.description:
-                help_text += f"</code> — <i>{command.description}</i>\n"
-
-        return help_text
-
-    def command_help(self, command: str) -> str:
-        for module in self.modules.values():
-            for cmd in module.commands.values():
-                if cmd.name == command or (cmd.aliases and command in cmd.aliases):
-                    command = cmd
-                    break
-            else:
-                continue
-            break
-        else:
-            raise ValueError(f"Command {command} not found")
-
-        prefix = get_prefix()
-
-        help_text = f"<b>Help for command</b> <code>{prefix}{command.name}</code>\n"
-        if command.aliases:
-            help_text += "<b>Aliases:</b> "
-            help_text += f"{' '.join([f'<code>{prefix}{alias}</code>' for alias in command.aliases])}\n"
-
-        help_text += f"\n<b>Module: {module.name}</b> (<code>{prefix}help {module.name}</code>)\n\n"
-        help_text += f"<code>{prefix}{command.name}"
-
-        if command.args:
-            help_text += f" {command.args}"
-        help_text += "</code>"
-        if command.description:
-            help_text += f" — <i>{command.description}</i>"
-
-        return help_text
-
-    @property
-    def modules_count(self) -> int:
-        return len(self.modules)
-
-    @property
-    def commands_count(self) -> int:
-        return sum(len(module.commands) for module in self.modules.values())
-
-
 async def shell_exec(
     command: str,
-    executable: Optional[str] = None,
-    timeout: Optional[Union[int, float]] = None,
+    executable: str | None = None,
+    timeout: float | None = None,
     stdout=asyncio.subprocess.PIPE,
     stderr=asyncio.subprocess.PIPE,
-    cwd: Optional[str] = None,
-) -> Tuple[int, str, str]:
+    cwd: str | None = None,
+) -> tuple[int, str, str]:
     """Executes shell command and returns tuple with return code, decoded stdout and stderr"""
 
     def run_command():
@@ -485,46 +294,39 @@ async def shell_exec(
 async def handle_restart(client: Client):
     restart_info = db.get("core.updater", "restart_info")
 
-    if restart_info:
-        try:
-            if restart_info["type"] == "restart":
-                logging.info(
-                    f"{client.me.username}#{client.me.id} | Userbot succesfully restarted."
-                )
-                await client.edit_message_text(
-                    chat_id=restart_info["chat_id"],
-                    message_id=restart_info["message_id"],
-                    text=f"<code>Restarted in {perf_counter() - restart_info['time']:.3f}s...</code>",
-                )
-            elif restart_info["type"] == "update":
-                current_hash = git.Repo().head.commit.hexsha
-                git.Repo().remote("origin").fetch()
+    if not restart_info:
+        return
 
-                update_text = (
-                    f"Userbot succesfully updated from {restart_info['hash'][:7]} "
-                    f"to {current_hash[:7]} version."
-                )
+    try:
+        if restart_info["type"] == "restart":
+            log.info(f"{client.me.username}#{client.me.id} | Userbot succesfully restarted.")
+            await client.edit_message_text(
+                chat_id=restart_info["chat_id"],
+                message_id=restart_info["message_id"],
+                text=f"<code>Restarted in {perf_counter() - restart_info['time']:.3f}s...</code>",
+            )
+        elif restart_info["type"] == "update":
+            current_hash = git.Repo().head.commit.hexsha
+            git.Repo().remote("origin").fetch()
 
-                logging.info(f"{client.me.username}#{client.me.id} | {update_text}.")
-                await client.edit_message_text(
-                    chat_id=restart_info["chat_id"],
-                    message_id=restart_info["message_id"],
-                    text=(
-                        f"<code>{update_text}.\n\n"
-                        f"Restarted in {perf_counter() - restart_info['time']:.3f}s...</code>"
-                    ),
-                )
-        except Exception:
-            print("Error when updating!")
-            traceback.print_exc()
+            update_text = (
+                f"Userbot succesfully updated from {restart_info['hash'][:7]} "
+                f"to {current_hash[:7]} version."
+            )
 
-        db.remove("core.updater", "restart_info")
-    else:
-        logging.info(
-            f"{client.me.username}#{client.me.id} on {git.Repo().active_branch.name}"
-            f"@{git.Repo().head.commit.hexsha[:7]}"
-            " | Userbot succesfully started."
-        )
+            log.info(f"{client.me.username}#{client.me.id} | {update_text}.")
+            await client.edit_message_text(
+                chat_id=restart_info["chat_id"],
+                message_id=restart_info["message_id"],
+                text=(
+                    f"<code>{update_text}.\n\n"
+                    f"Restarted in {perf_counter() - restart_info['time']:.3f}s...</code>"
+                ),
+            )
+    except Exception as e:
+        print(f"Error when updating: <{e.__class__.__name__}> {e}")
+
+    db.remove("core.updater", "restart_info")
 
 
 def time_diff(dt: datetime.datetime) -> str:
@@ -557,7 +359,7 @@ def time_diff(dt: datetime.datetime) -> str:
 
 
 class TTLMemoryCache:
-    def __init__(self, default_ttl: Optional[float] = None, capacity: int = 1000):
+    def __init__(self, default_ttl: float | None = None, capacity: int = 1000):
         self.data = {}
         self.default_ttl = default_ttl
         self.capacity = capacity
@@ -631,8 +433,11 @@ def convert_tags(text: str) -> str:
 
 def parse_duration(duration_str: str) -> int:
     match = re.match(r"^(\d+)([smhdwy]|mo)$", duration_str)
+
     if not match:
-        return None
+        raise ValueError(
+            "Invalid duration format. Use a number followed by a unit (s, m, h, d, w, mo, y)."
+        )
 
     value, unit = match.groups()
     value = int(value)
@@ -651,43 +456,32 @@ def parse_duration(duration_str: str) -> int:
         return value * 2592000  # 30 дней в месяц
     elif unit == "y":
         return value * 31536000  # 365 дней в год
-    else:
-        return None
+
+    raise ValueError("Invalid duration unit.")
 
 
-def format_bytes(bytes, units=["B", "KB", "MB", "GB", "TB"]) -> str:
+def format_bytes(bytes, units=None) -> str:
+    if units is None:
+        units = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"]
+
     i = 0
 
     while bytes >= 1024 and i < len(units) - 1:
         bytes /= 1024.0
         i += 1
 
-    return "{:.2f}{}".format(bytes, units[i])
+    return f"{bytes:.2f}{units[i]}"
 
 
 def format_time(seconds: float) -> str:
-    seconds = int(seconds)
-    d, rem = divmod(seconds, 86400)  # дни
-    h, rem = divmod(rem, 3600)  # часы
-    m, s = divmod(rem, 60)  # минуты и секунды
+    if seconds < 0 or seconds == float("inf"):
+        return "-:--:--"
 
-    if d > 0:
-        if h > 0:
-            return f"{d}d:{h}h"
-        else:
-            return f"{d}d"
-    elif h > 0:
-        if m > 0:
-            return f"{h}h:{m}m"
-        else:
-            return f"{h}h"
-    elif m > 0:
-        if s > 0:
-            return f"{m}m:{s}s"
-        else:
-            return f"{m}m"
-    else:
-        return f"{s}s"
+    seconds = int(seconds)
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+
+    return f"{hours}:{minutes:02d}:{secs:02d}"
 
 
 def encrypt(data: bytes, password: str) -> bytes:
@@ -700,14 +494,13 @@ def encrypt(data: bytes, password: str) -> bytes:
     salt = get_random_bytes(16)
     iv = get_random_bytes(16)
 
-    aes_cipher = AES.new(
-        PBKDF2(password, salt, dkLen=32, count=100_000), AES.MODE_CBC, iv
-    )
+    # PBKDF2 uses HMAC-SHA1 by default; kept for compatibility with stored data
+    key = PBKDF2(password, salt, dkLen=32, count=100_000)
 
     pad_len = 16 - len(plaintext) % 16
     padded = plaintext + bytes([pad_len]) * pad_len
 
-    return salt + iv + aes_cipher.encrypt(padded)
+    return salt + iv + AES.new(key, AES.MODE_CBC, iv).encrypt(padded)
 
 
 def decrypt(data: bytes, password: str) -> bytes:
@@ -718,10 +511,8 @@ def decrypt(data: bytes, password: str) -> bytes:
     iv = data[16:32]
     ciphertext = data[32:]
 
-    aes_cipher = AES.new(
-        PBKDF2(password, salt, dkLen=32, count=100_000), AES.MODE_CBC, iv
-    )
-    decrypted = aes_cipher.decrypt(ciphertext)
+    key = PBKDF2(password, salt, dkLen=32, count=100_000)
+    decrypted = AES.new(key, AES.MODE_CBC, iv).decrypt(ciphertext)
 
     pad_len = decrypted[-1]
 

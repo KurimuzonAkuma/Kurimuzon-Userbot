@@ -1,11 +1,19 @@
-import importlib
+import copy
+import datetime
+import inspect
 import logging
 import sys
 from importlib import import_module
 from pathlib import Path
-
+from utils.loader import help_registry, scheduler
 from pyrogram import Client
-from pyrogram.handlers.handler import Handler
+from apscheduler.jobstores.base import JobLookupError
+from utils.loader import Plugin
+
+from utils.loader import (
+    add_command_help,
+    create_command_handler,
+)
 
 log = logging.getLogger(__name__)
 
@@ -154,6 +162,189 @@ class CustomClient(Client):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.plugin_instances = {}
+        self.plugin_handlers = {}
+        self.plugin_loops = []
+        self.scheduled_plugin_loop_ids = set()
+
+    def _register_class_plugins(self, module, module_path: str) -> int:
+
+        plugin_classes = [
+            (class_name, plugin_class)
+            for class_name, plugin_class in vars(module).items()
+            if inspect.isclass(plugin_class)
+            and plugin_class is not Plugin
+            and plugin_class.__module__ == module.__name__
+            and issubclass(plugin_class, Plugin)
+        ]
+        if not plugin_classes:
+            return 0
+
+        if module_path in self.plugin_instances:
+            raise ValueError(f"Plugin '{module_path}' is already loaded")
+
+        conflicts = self.get_plugin_registration_conflicts(module, module_path)
+        if conflicts:
+            raise ValueError("\n".join(conflicts))
+
+        plugins = [
+            (class_name, plugin_class, plugin_class(self))
+            for class_name, plugin_class in plugin_classes
+        ]
+
+        count = 0
+        for class_name, plugin_class, plugin in plugins:
+            self.plugin_instances.setdefault(module_path, []).append(plugin)
+            class_registration_count = 0
+            plugin_name = Path(module.__file__).stem
+            module_help = help_registry.add_module(plugin_name, module.__file__)
+            help_registry.add_class_name(module_help, class_name)
+            plugin._loader_help_name = plugin_name
+
+            for method_name, method in vars(plugin_class).items():
+                bound_method = getattr(plugin, method_name)
+                command_metadata = getattr(method, "__loader_command__", None)
+                if command_metadata:
+                    handler, group = create_command_handler(plugin, bound_method, command_metadata)
+                    self.add_handler(handler, group)
+                    self.plugin_handlers.setdefault(module_path, []).append((handler, group))
+                    add_command_help(module_help, command_metadata)
+                    count += 1
+                    class_registration_count += 1
+
+                for handler, group in getattr(method, "handlers", []):
+                    bound_handler = copy.copy(handler)
+                    bound_handler.callback = bound_method
+                    self.add_handler(bound_handler, group)
+                    self.plugin_handlers.setdefault(module_path, []).append((bound_handler, group))
+                    count += 1
+                    class_registration_count += 1
+
+                loop_metadata = getattr(method, "__loader_loop__", None)
+                if loop_metadata:
+                    self.plugin_loops.append(
+                        {
+                            "func": bound_method,
+                            "id": f"{module_path}.{class_name}.{method_name}",
+                            **loop_metadata,
+                        }
+                    )
+                    count += 1
+                    class_registration_count += 1
+
+            if class_registration_count:
+                log.info(
+                    '[%s] [LOAD] Loaded plugin "%s" from "%s" (%s registrations)',
+                    self.name,
+                    plugin_name,
+                    module_path,
+                    class_registration_count,
+                )
+
+        return count
+
+    def get_plugin_registration_conflicts(self, module, module_path: str) -> list[str]:
+        plugin_classes = [
+            (class_name, plugin_class)
+            for class_name, plugin_class in vars(module).items()
+            if inspect.isclass(plugin_class)
+            and plugin_class is not Plugin
+            and plugin_class.__module__ == module.__name__
+            and issubclass(plugin_class, Plugin)
+        ]
+        if not plugin_classes:
+            return []
+
+        if module_path in self.plugin_instances:
+            return [f"Plugin '{module_path}' is already loaded"]
+
+        plugin_file = Path(module.__file__).resolve()
+        registered_names = {}
+        conflicts = []
+
+        for module_name, help_module in help_registry.modules.items():
+            for registered_command in help_module.commands:
+                for name in registered_command.commands:
+                    registered_names.setdefault(
+                        name.casefold(), (module_name, registered_command.commands[0])
+                    )
+
+        candidate_names = {}
+        candidate_modules = {}
+
+        for class_name, plugin_class in plugin_classes:
+            command_metadata = [
+                metadata
+                for method in vars(plugin_class).values()
+                if (metadata := getattr(method, "__loader_command__", None))
+            ]
+            if not command_metadata:
+                continue
+
+            help_name = plugin_file.stem
+            for lookup_name in (plugin_file.stem, class_name):
+                lookup_key = lookup_name.casefold()
+                previous = candidate_modules.get(lookup_key)
+                if previous and previous[1] != str(plugin_file):
+                    conflicts.append(f"Plugin name '{lookup_name}' conflicts with '{previous[0]}'")
+                candidate_modules[lookup_key] = (lookup_name, str(plugin_file))
+
+                try:
+                    existing_module = help_registry.get_module(lookup_name)
+                except ValueError:
+                    existing_module = None
+                if existing_module and Path(existing_module.path).resolve() != plugin_file:
+                    conflicts.append(
+                        f"Plugin name '{lookup_name}' is already registered by "
+                        f"'{existing_module.name}'"
+                    )
+
+            for metadata in command_metadata:
+                local_names = set()
+                for name in metadata["commands"]:
+                    key = name.casefold()
+                    if key in local_names:
+                        conflicts.append(
+                            f"Command '{name}' is declared more than once in the uploaded plugin"
+                        )
+                        continue
+                    local_names.add(key)
+
+                    existing = registered_names.get(key)
+                    if existing:
+                        conflicts.append(
+                            f"Command '{name}' is already used by '{existing[0]}.{existing[1]}'"
+                        )
+                        continue
+
+                    previous = candidate_names.get(key)
+                    if previous:
+                        conflicts.append(
+                            f"Command '{name}' conflicts with '{previous[1]}' in the uploaded plugin"
+                        )
+                        continue
+
+                    candidate_names[key] = (help_name, name)
+
+        return list(dict.fromkeys(conflicts))
+
+    def register_plugin_loops(self):
+
+        for job in self.plugin_loops:
+            if job["id"] in self.scheduled_plugin_loop_ids:
+                continue
+
+            scheduler.add_job(
+                func=job["func"],
+                trigger="interval",
+                seconds=job["interval"],
+                id=job["id"],
+                next_run_time=None if job["wait_before"] else datetime.datetime.now(),
+                max_instances=1,
+                coalesce=True,
+                replace_existing=True,
+            )
+            self.scheduled_plugin_loop_ids.add(job["id"])
 
     def unload_plugin(self, plugin_name: str) -> bool:
         """
@@ -166,6 +357,7 @@ class CustomClient(Client):
         Returns:
             ``bool``: True if the plugin was unloaded successfully, False otherwise.
         """
+
         if self.plugins:
             root = self.plugins["root"]
         else:
@@ -174,221 +366,79 @@ class CustomClient(Client):
         path = root + "." + plugin_name
 
         if path not in sys.modules:
+            log.warning('[%s] [UNLOAD] Plugin "%s" is not loaded', self.name, path)
             return False
 
-        try:
-            module = importlib.import_module(path)
-        except ImportError:
-            log.warning(
-                '[%s] [UNLOAD] Ignoring non-existent module "%s"', self.name, path
-            )
-            return False
+        removed_handlers = self.plugin_handlers.pop(path, [])
+        for handler, group in removed_handlers:
+            self.remove_handler(handler, group)
 
-        for name in vars(module).keys():
-            # noinspection PyBroadException
-            try:
-                for handler, group in getattr(module, name).handlers:
-                    if isinstance(handler, Handler) and isinstance(group, int):
-                        self.remove_handler(handler, group)
+        plugins = self.plugin_instances.pop(path, [])
+        plugin_names = []
+        for plugin in plugins:
+            plugin_names.append(Path(sys.modules[path].__file__).stem)
+            help_name = getattr(plugin, "_loader_help_name", None)
+            if help_name and help_name in help_registry.modules:
+                help_registry.delete_module(help_name)
 
-                        log.info(
-                            '[{}] [UNLOAD] {}("{}") from group {} in "{}"'.format(
-                                self.name, type(handler).__name__, name, group, path
-                            )
-                        )
-
-            except Exception:
-                pass
+        plugin_loops = []
+        removed_loops = 0
+        for job in self.plugin_loops:
+            if job["id"].startswith(path + "."):
+                removed_loops += 1
+                try:
+                    scheduler.remove_job(job["id"])
+                except JobLookupError:
+                    pass
+                self.scheduled_plugin_loop_ids.discard(job["id"])
+            else:
+                plugin_loops.append(job)
+        self.plugin_loops = plugin_loops
 
         del sys.modules[path]
+
+        log.info(
+            '[%s] [UNLOAD] Unloaded plugin "%s" from "%s" (%s handlers, %s loops)',
+            self.name,
+            ", ".join(dict.fromkeys(plugin_names)) or plugin_name,
+            path,
+            len(removed_handlers),
+            removed_loops,
+        )
 
         return True
 
     def load_plugins(self):
-        if self.plugins:
-            plugins = self.plugins.copy()
-
-            for option in ["include", "exclude"]:
-                if plugins.get(option, []):
-                    plugins[option] = [
-                        (i.split()[0], i.split()[1:] or None)
-                        for i in self.plugins[option]
-                    ]
-        else:
+        if not self.plugins or not self.plugins.get("enabled", True):
             return
 
-        if plugins.get("enabled", True):
-            root = plugins["root"]
-            include = plugins.get("include", [])
-            exclude = plugins.get("exclude", [])
+        root = self.plugins["root"]
+        count = 0
 
-            count = 0
+        for path in sorted(Path(root.replace(".", "/")).rglob("*.py")):
+            module_path = ".".join(path.parent.parts + (path.stem,))
 
-            if not include:
-                for path in sorted(Path(root.replace(".", "/")).rglob("*.py")):
-                    module_path = ".".join(path.parent.parts + (path.stem,))
+            try:
+                module = import_module(module_path)
+            except Exception as e:
+                log.warning(f'[{self.name}] [LOAD] Ignoring module "{module_path}": {e}')
+                continue
 
-                    try:
-                        module = import_module(module_path)
-                    except Exception as e:
-                        log.warning(
-                            '[{}] [LOAD] Ignoring module "{}": {}'.format(
-                                self.name, module_path, e
-                            )
-                        )
-                        continue
-
-                    for name in vars(module).keys():
-                        # noinspection PyBroadException
-                        try:
-                            for handler, group in getattr(module, name).handlers:
-                                if isinstance(handler, Handler) and isinstance(
-                                    group, int
-                                ):
-                                    self.add_handler(handler, group)
-
-                                    log.info(
-                                        '[{}] [LOAD] {}("{}") in group {} from "{}"'.format(
-                                            self.name,
-                                            type(handler).__name__,
-                                            name,
-                                            group,
-                                            module_path,
-                                        )
-                                    )
-
-                                    count += 1
-                        except Exception:
-                            pass
-            else:
-                for path, handlers in include:
-                    module_path = root + "." + path
-                    warn_non_existent_functions = True
-
-                    try:
-                        module = import_module(module_path)
-                    except ImportError:
-                        log.warning(
-                            '[%s] [LOAD] Ignoring non-existent module "%s"',
-                            self.name,
-                            module_path,
-                        )
-                        continue
-                    except Exception as e:
-                        log.warning(
-                            '[{}] [LOAD] Ignoring module "{}": {}'.format(
-                                self.name, module_path, e
-                            )
-                        )
-                        continue
-
-                    if "__path__" in dir(module):
-                        log.warning(
-                            '[%s] [LOAD] Ignoring namespace "%s"',
-                            self.name,
-                            module_path,
-                        )
-                        continue
-
-                    if handlers is None:
-                        handlers = vars(module).keys()
-                        warn_non_existent_functions = False
-
-                    for name in handlers:
-                        # noinspection PyBroadException
-                        try:
-                            for handler, group in getattr(module, name).handlers:
-                                if isinstance(handler, Handler) and isinstance(
-                                    group, int
-                                ):
-                                    self.add_handler(handler, group)
-
-                                    log.info(
-                                        '[{}] [LOAD] {}("{}") in group {} from "{}"'.format(
-                                            self.name,
-                                            type(handler).__name__,
-                                            name,
-                                            group,
-                                            module_path,
-                                        )
-                                    )
-
-                                    count += 1
-                        except Exception:
-                            if warn_non_existent_functions:
-                                log.warning(
-                                    '[{}] [LOAD] Ignoring non-existent function "{}" from "{}"'.format(
-                                        self.name, name, module_path
-                                    )
-                                )
-
-            if exclude:
-                for path, handlers in exclude:
-                    module_path = root + "." + path
-                    warn_non_existent_functions = True
-
-                    try:
-                        module = import_module(module_path)
-                    except ImportError:
-                        log.warning(
-                            '[%s] [UNLOAD] Ignoring non-existent module "%s"',
-                            self.name,
-                            module_path,
-                        )
-                        continue
-                    except Exception as e:
-                        log.warning(
-                            '[{}] [UNLOAD] Ignoring module "{}": {}'.format(
-                                self.name, module_path, e
-                            )
-                        )
-                        continue
-
-                    if "__path__" in dir(module):
-                        log.warning(
-                            '[%s] [UNLOAD] Ignoring namespace "%s"',
-                            self.name,
-                            module_path,
-                        )
-                        continue
-
-                    if handlers is None:
-                        handlers = vars(module).keys()
-                        warn_non_existent_functions = False
-
-                    for name in handlers:
-                        # noinspection PyBroadException
-                        try:
-                            for handler, group in getattr(module, name).handlers:
-                                if isinstance(handler, Handler) and isinstance(
-                                    group, int
-                                ):
-                                    self.remove_handler(handler, group)
-
-                                    log.info(
-                                        '[{}] [UNLOAD] {}("{}") from group {} in "{}"'.format(
-                                            self.name,
-                                            type(handler).__name__,
-                                            name,
-                                            group,
-                                            module_path,
-                                        )
-                                    )
-
-                                    count -= 1
-                        except Exception:
-                            if warn_non_existent_functions:
-                                log.warning(
-                                    '[{}] [UNLOAD] Ignoring non-existent function "{}" from "{}"'.format(
-                                        self.name, name, module_path
-                                    )
-                                )
-
-            if count > 0:
-                log.info(
-                    '[{}] Successfully loaded {} plugin{} from "{}"'.format(
-                        self.name, count, "s" if count > 1 else "", root
-                    )
+            try:
+                count += self._register_class_plugins(module, module_path)
+            except ValueError as e:
+                log.warning(
+                    '[%s] [LOAD] Skipping plugin "%s" due to a registration conflict: %s',
+                    self.name,
+                    module_path,
+                    e,
                 )
-            else:
-                log.warning('[%s] No plugin loaded from "%s"', self.name, root)
+
+        if count:
+            log.info(
+                '[{}] Successfully loaded {} plugin registration{} from "{}"'.format(
+                    self.name, count, "s" if count != 1 else "", root
+                )
+            )
+        else:
+            log.warning('[%s] No plugin registrations found in "%s"', self.name, root)

@@ -1,23 +1,27 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from utils.filters import command
-from utils.misc import modules_help
-from utils.scripts import get_args_raw, with_args
+from utils import loader
+from utils.loader import CommandArg, Plugin
+from utils.scripts import get_args_raw
 
 
-@Client.on_message(command(["calc", "c"]) & filters.me)
-@with_args("Expression required to calculate")
-async def calc(_, message: Message):
-    args = get_args_raw(message)
+class Calculator(Plugin):
+    @loader.command(
+        ["calc", "c"],
+        description="Evaluate expression and return result",
+        args=[CommandArg("expression", "expression to calculate", required=False)],
+        filters=~filters.scheduled & filters.me,
+    )
+    async def calc(self, client: Client, message: Message):
+        args = get_args_raw(message)
 
-    try:
-        await message.edit(f"<i>{args}</i><b> = </b><code>{eval(args)}</code>")
-    except Exception as e:
-        await message.edit(f"<i>{args}</i><b> = </b><code>{e}</code>")
+        if not args:
+            return await message.edit("Expression required to calculate")
 
-
-module = modules_help.add_module("calculator", __file__)
-module.add_command(
-    "calc", "Evaluate expression and return result", "[expression]*", ["c"]
-)
+        try:
+            await message.edit(f"<i>{args}</i> = <code>{eval(args)}</code>")
+        except Exception as e:
+            await message.edit(
+                f"Error while evaluating expression: <code>{e.__class__.__name__}: {e}</code>"
+            )

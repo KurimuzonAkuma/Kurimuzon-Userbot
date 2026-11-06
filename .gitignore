@@ -11,6 +11,7 @@ __pycache__
 *.0
 
 custom_modules/
+custom_plugins/
 downloads/
 *.py1
 

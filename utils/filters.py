@@ -1,16 +1,15 @@
 import re
-from typing import List, Union
 
 from pyrogram import Client
 from pyrogram.filters import Filter, create
-from pyrogram.types import Message, Story
+from pyrogram.types import Message
 
 from utils.scripts import get_prefix
 
 reactions_filter = create(lambda _, __, message: bool(message.reactions))
 
 
-def command(commands: Union[str, List[str]], case_sensitive: bool = False):
+def command(commands: str | list[str], case_sensitive: bool = False):
     """Filter commands, i.e.: text messages starting with "/" or any other custom prefix.
 
     Parameters:
@@ -19,8 +18,6 @@ def command(commands: Union[str, List[str]], case_sensitive: bool = False):
             Examples: "start", ["start", "help", "settings"]. When a message text containing
             a command arrives, the command itself and its arguments will be stored in the *command*
             field of the :obj:`~pyrogram.Message`.
-
-
 
         case_sensitive (``bool``, *optional*):
             Pass True if you want your command(s) to be case sensitive. Defaults to False.
@@ -74,9 +71,7 @@ def command(commands: Union[str, List[str]], case_sensitive: bool = False):
     commands = commands if isinstance(commands, list) else [commands]
     commands = {c if case_sensitive else c.lower() for c in commands}
 
-    return create(
-        func, "CommandFilter", commands=commands, case_sensitive=case_sensitive
-    )
+    return create(func, "CommandFilter", commands=commands, case_sensitive=case_sensitive)
 
 
 class startswith(Filter, set):
@@ -111,12 +106,10 @@ class viabot(Filter, set):
             Defaults to None (any bot).
     """
 
-    def __init__(self, bots: Union[int, str, List[Union[int, str]]] = None):
+    def __init__(self, bots: int | str | list[int | str] | None = None):
         bots = [] if bots is None else bots if isinstance(bots, list) else [bots]
 
-        super().__init__(
-            bot.lower().strip("@") if isinstance(bot, str) else bot for bot in bots
-        )
+        super().__init__(bot.lower().strip("@") if isinstance(bot, str) else bot for bot in bots)
 
     async def __call__(self, _, message: Message):
         return message.via_bot and (
@@ -125,27 +118,14 @@ class viabot(Filter, set):
         )
 
 
-async def story_edited_filter(_, __, story: Story):
-    return bool(story.edited)
+story_edited = create(lambda _, __, story: bool(story.edited))
+
+story_deleted = create(lambda _, __, story: bool(story.deleted))
 
 
-story_edited = create(story_edited_filter)
+ttl_media = create(
+    lambda _, __, m: bool(m.media and getattr(getattr(m, m.media.value, None), "ttl_seconds", None))
+)
 
 
-async def story_deleted_filter(_, __, story: Story):
-    return bool(story.deleted)
-
-
-story_deleted = create(story_deleted_filter)
-
-
-def ttl_media_filter(_, __, message: Message) -> bool:
-    if not message.media:
-        return False
-
-    return bool(
-        getattr(getattr(message, message.media.value, None), "ttl_seconds", None)
-    )
-
-
-ttl_media = create(ttl_media_filter)
+edit_hidden = create(lambda _, __, message: bool(message.edit_hidden))
